@@ -1,0 +1,16 @@
+{
+  "name": "singular-code-review-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Containerized OpenCode inline PR reviewer source package.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test",
+    "test:stage": "node --test test/stage_review_comment.test.js",
+    "test:filter": "node --test test/filter_review_comments.test.js",
+    "test:orchestrator": "node --test test/review_orchestrator.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

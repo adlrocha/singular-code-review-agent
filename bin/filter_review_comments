@@ -1,0 +1,89 @@
+#!/usr/bin/env node
+
+const fs = require("node:fs");
+const {
+  loadQueue,
+  parseUnifiedDiff,
+  validateQueue,
+  validCommentRangesFromDiff,
+  writeJsonFile
+} = require("../lib/review-tools");
+
+function fail(message) {
+  console.error(`filter_review_comments: ${message}`);
+  process.exit(1);
+}
+
+function filterReviewComments(diffFile, stagedFile, outputFile) {
+  const diffText = fs.readFileSync(diffFile, "utf8");
+  const context = {
+    diff: {
+      file: diffFile,
+      files: parseUnifiedDiff(diffText).files.map((file) => file.path)
+    },
+    valid_comment_ranges: validCommentRangesFromDiff(diffText),
+    review_comments: []
+  };
+  const validated = validateQueue(loadQueue(stagedFile), context);
+  writeJsonFile(
+    outputFile,
+    validated.inlineComments.map((comment) => ({
+      path: comment.path,
+      line: comment.line,
+      side: comment.side,
+      body: comment.body,
+      ...(comment.start_line === undefined ? {} : { start_line: comment.start_line, start_side: comment.start_side })
+    }))
+  );
+  return {
+    staged: validated.stats.queued_inline,
+    valid: validated.stats.valid_inline,
+    dropped: validated.stats.dropped
+  };
+}
+
+function main() {
+  const [diffFile, stagedFile, outputFile] = process.argv.slice(2);
+  if (!diffFile || !stagedFile || !outputFile) {
+    fail("usage: filter_review_comments <diff-file> <staged-json-file> <output-json-file>");
+  }
+
+  try {
+    process.stdout.write(`${JSON.stringify(filterReviewComments(diffFile, stagedFile, outputFile))}\n`);
+  } catch (error) {
+    fail(error.message || String(error));
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  extractRightSideAddedLines(diffText) {
+    const parsed = parseUnifiedDiff(diffText);
+    const lines = new Set();
+    for (const file of parsed.files) {
+      for (const line of file.addedLines) {
+        lines.add(`${file.path}:${line}`);
+      }
+    }
+    return lines;
+  },
+  filterReviewComments,
+  normalizeDiffPath: require("../lib/review-tools").normalizeDiffPath,
+  isValidComment(comment, addedLines) {
+    return addedLines.has(`${comment.path}:${comment.line}`) && comment.side === "RIGHT" && Boolean(comment.body);
+  },
+  uniqueComments(comments) {
+    const seen = new Set();
+    return comments.filter((comment) => {
+      const key = JSON.stringify(comment);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }
+};

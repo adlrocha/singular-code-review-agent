@@ -1,0 +1,65 @@
+#!/usr/bin/env node
+
+const {
+  addInlineComment,
+  loadQueue,
+  queueFileFromEnv,
+  saveQueue
+} = require("../lib/review-tools");
+
+function usage() {
+  console.error("usage: stage_review_comment <path> <line> <comment_body...>");
+}
+
+function fail(message) {
+  console.error(`stage_review_comment: ${message}`);
+  process.exit(1);
+}
+
+function validateInput(argv) {
+  if (argv.length < 3) {
+    const error = new Error("missing required arguments");
+    error.showUsage = true;
+    throw error;
+  }
+
+  return {
+    path: argv[0],
+    line: argv[1],
+    body: argv.slice(2).join(" "),
+    side: "RIGHT"
+  };
+}
+
+async function stageReviewComment(argv, options = {}) {
+  const input = validateInput(argv);
+  return addInlineComment(input, options.stateFile || queueFileFromEnv());
+}
+
+async function main() {
+  try {
+    await stageReviewComment(process.argv.slice(2));
+  } catch (error) {
+    if (error.showUsage) {
+      usage();
+    }
+    fail(error.message || String(error));
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  stageReviewComment,
+  validateInput,
+  loadComments(file) {
+    return loadQueue(file).inlineComments;
+  },
+  writeComments(file, comments) {
+    const queue = loadQueue(file);
+    queue.inlineComments = comments;
+    saveQueue(queue, file);
+  }
+};

@@ -1,0 +1,209 @@
+const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const test = require("node:test");
+
+const repoRoot = path.resolve(__dirname, "..");
+const orchestrator = path.join(repoRoot, "bin", "review_orchestrator.sh");
+const fixture = path.join(repoRoot, "test", "fixtures", "sample.patch");
+
+function makeExecutable(file, body) {
+  fs.writeFileSync(file, body, { mode: 0o755 });
+}
+
+function makeHarness(opencodeBody) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "orchestrator-"));
+  const workspace = path.join(dir, "workspace");
+  const mockbin = path.join(dir, "mockbin");
+  fs.mkdirSync(workspace);
+  fs.mkdirSync(mockbin);
+
+  const apiPayloadFile = path.join(dir, "api-payload.json");
+
+  makeExecutable(
+    path.join(mockbin, "gh"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "pr" && "\${2:-}" == "diff" ]]; then
+  cat "${fixture}"
+  exit 0
+fi
+if [[ "\${1:-}" == "pr" && "\${2:-}" == "view" ]]; then
+  printf '{"number":42,"title":"Test PR","body":"Body","author":{"login":"alice"},"baseRefName":"main","headRefName":"feature","url":"https://github.com/owner/repo/pull/42"}\\n'
+  exit 0
+fi
+if [[ "\${1:-}" == "api" ]]; then
+  if [[ "\${2:-}" == "user" ]]; then
+    printf '{"login":"review-bot"}\\n'
+    exit 0
+  fi
+  if [[ " $* " == *" --paginate "* ]]; then
+    for arg in "$@"; do
+      case "$arg" in
+        repos/owner/repo/issues/42/comments)
+          printf '[]\\n'
+          exit 0
+          ;;
+        repos/owner/repo/pulls/42/comments)
+          printf '[{"id":456,"body":"Existing finding","user":{"login":"review-bot"},"path":"src/app.js","line":2}]\\n'
+          exit 0
+          ;;
+        repos/owner/repo/pulls/42/reviews)
+          printf '[]\\n'
+          exit 0
+          ;;
+      esac
+    done
+  fi
+  input=""
+  endpoint=""
+  while [[ "$#" -gt 0 ]]; do
+    if [[ "$1" == "--input" ]]; then
+      input="$2"
+      shift 2
+    elif [[ "$1" == repos/* ]]; then
+      endpoint="$1"
+      shift
+    else
+      shift
+    fi
+  done
+  if [[ "$endpoint" == "repos/owner/repo/pulls/42/reviews" ]]; then
+    cp "$input" "${apiPayloadFile}"
+    exit 0
+  fi
+  if [[ "$endpoint" == "repos/owner/repo/pulls/42/comments/456/replies" ]]; then
+    cp "$input" "${apiPayloadFile}.reply"
+    exit 0
+  fi
+  echo "unexpected gh api endpoint: $endpoint" >&2
+  exit 1
+fi
+if [[ "\${1:-}" == "pr" && "\${2:-}" == "checkout" ]]; then
+  exit 0
+fi
+echo "unexpected gh invocation: $*" >&2
+exit 1
+`
+  );
+
+  makeExecutable(path.join(mockbin, "opencode"), opencodeBody);
+  makeExecutable(path.join(mockbin, "context7-mcp"), `#!/usr/bin/env bash
+echo "context7 mock"
+`);
+
+  return { dir, workspace, mockbin, apiPayloadFile };
+}
+
+function runOrchestrator(harness, overrides = {}) {
+  const env = {
+    ...process.env,
+    PATH: `${harness.mockbin}:${path.join(repoRoot, "bin")}:${process.env.PATH}`,
+    WORKSPACE: harness.workspace,
+    PR_NUMBER: "42",
+    GITHUB_REPOSITORY: "owner/repo",
+    GH_TOKEN: "test-token",
+    REVIEW_QUEUE_FILE: path.join(harness.dir, "review_queue.json"),
+    REVIEW_CONTEXT_FILE: path.join(harness.dir, "review_context.json"),
+    REVIEW_DIFF_FILE: path.join(harness.dir, "pr.diff"),
+    REVIEW_VALIDATED_FILE: path.join(harness.dir, "review_validated.json"),
+    REVIEW_PAYLOAD_FILE: path.join(harness.dir, "final_review.json"),
+    HOME: path.join(harness.dir, "home"),
+    ...overrides
+  };
+
+  return execFileSync("bash", [orchestrator], {
+    cwd: harness.workspace,
+    env,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+}
+
+test("submits a single batched review with only valid comments", () => {
+  const harness = makeHarness(`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "run" && "\${2:-}" == "--help" ]]; then
+  exit 1
+fi
+review_comments add --path "src/app.js" --line "2" --body "The new timeout can become NaN and break callers."
+review_comments add --path "src/app.js" --line "1" --body "This context-line comment should be filtered."
+review_comments add --path "src/app.js" --line "2" --body "The new timeout can become NaN and break callers."
+`);
+
+  runOrchestrator(harness);
+
+  const payload = JSON.parse(fs.readFileSync(harness.apiPayloadFile, "utf8"));
+  assert.equal(payload.event, "COMMENT");
+  assert.equal(payload.comments.length, 1);
+  assert.deepEqual(payload.comments[0], {
+    path: "src/app.js",
+    line: 2,
+    side: "RIGHT",
+    body: "The new timeout can become NaN and break callers."
+  });
+});
+
+test("skips GitHub review submission when no valid comments remain", () => {
+  const harness = makeHarness(`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "run" && "\${2:-}" == "--help" ]]; then
+  exit 1
+fi
+review_comments add --path "src/app.js" --line "1" --body "Context-line comment should be filtered."
+`);
+
+  runOrchestrator(harness);
+
+  assert.equal(fs.existsSync(harness.apiPayloadFile), false);
+});
+
+test("installs the committed OpenCode config template", () => {
+  const harness = makeHarness(`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "run" && "\${2:-}" == "--help" ]]; then
+  exit 1
+fi
+`);
+
+  runOrchestrator(harness, {
+    OPENCODE_MODEL: "test/model",
+    CONTEXT7_API_KEY: "ctx7-test"
+  });
+
+  const config = JSON.parse(
+    fs.readFileSync(path.join(harness.dir, "home", ".config", "opencode", "opencode.json"), "utf8")
+  );
+
+  assert.equal(config.model, "{env:OPENCODE_MODEL}");
+  assert.deepEqual(config.provider["opencode-go"], {
+    options: {
+      apiKey: "{env:OPENCODE_API_KEY}"
+    }
+  });
+  assert.deepEqual(config.mcp.context7, {
+    type: "local",
+    command: ["context7-mcp"],
+    enabled: true,
+    environment: {
+      CONTEXT7_API_KEY: "{env:CONTEXT7_API_KEY}"
+    }
+  });
+});
+
+test("submits queued replies to existing review comments", () => {
+  const harness = makeHarness(`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "run" && "\${2:-}" == "--help" ]]; then
+  exit 1
+fi
+review_comments reply --to "456" --body "This still needs a fix."
+`);
+
+  runOrchestrator(harness);
+
+  const payload = JSON.parse(fs.readFileSync(`${harness.apiPayloadFile}.reply`, "utf8"));
+  assert.deepEqual(payload, { body: "This still needs a fix." });
+});

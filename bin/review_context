@@ -1,0 +1,62 @@
+#!/usr/bin/env node
+
+const {
+  buildReviewContext,
+  contextFileFromEnv,
+  readContext,
+  writeJsonFile
+} = require("../lib/review-tools");
+
+function fail(message) {
+  console.error(`review_context: ${message}`);
+  process.exit(1);
+}
+
+function parseArgs(argv) {
+  const result = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg.startsWith("--")) {
+      continue;
+    }
+    const key = arg.slice(2).replace(/-/g, "_");
+    const next = argv[index + 1];
+    if (!next || next.startsWith("--")) {
+      result[key] = true;
+    } else {
+      result[key] = next;
+      index += 1;
+    }
+  }
+  return result;
+}
+
+function printJson(value) {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const output = options.output || contextFileFromEnv();
+
+  try {
+    if (options.refresh) {
+      const context = buildReviewContext({
+        repo: options.repo,
+        prNumber: options.pr,
+        diffFile: options.diff_file
+      });
+      writeJsonFile(output, context);
+      printJson(context);
+      return;
+    }
+
+    printJson(readContext(output));
+  } catch (error) {
+    fail(error.message || String(error));
+  }
+}
+
+if (require.main === module) {
+  main();
+}

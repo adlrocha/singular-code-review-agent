@@ -1,0 +1,13 @@
+.git/
+.agents/
+.codex/
+.github/
+examples/
+test/
+node_modules/
+coverage/
+tmp/
+README.md
+package.json
+*.log
+.DS_Store
