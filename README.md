@@ -13,6 +13,28 @@ The example trigger workflow runs on non-draft PR creation, when a draft PR is
 marked ready for review, or when someone posts a PR comment containing
 `@singular-code-review`; it does not run on every push to an existing PR.
 
+## Distribution model
+
+This is open-source infrastructure for Singular's own repositories, not a
+hosted public review service. The workflow in this repository is wired to the
+Singular-owned GitHub App identity and expects the consuming repository to
+provide that App's private key as an Actions secret.
+
+That means:
+
+- Singular repositories can use this directly after the App is installed and
+  the required org or repo secrets are available.
+- Outside repositories cannot use the Singular App unless they have the
+  private key, which they should not have.
+- Forks are welcome to run their own copy by creating their own GitHub App and
+  updating the hardcoded App identity in the forked source, including the App
+  client ID, bot login, and command trigger if they want different names.
+
+The current design intentionally runs inside the consuming repository's GitHub
+Actions environment. It is easy to operate for trusted repositories, but it is
+not an install-only SaaS model: the consuming repository still needs a small
+workflow file and the runtime secrets required by that workflow.
+
 ## What it provides
 
 - A reproducible Docker image built from an OpenCode sandbox base image.
@@ -58,6 +80,45 @@ GitHub App client ID, image, and OpenCode agent are owned by this repository.
 Consuming repositories can optionally set the `OPENCODE_MODEL` repository
 variable to try a different model without changing workflow YAML.
 
+## Install on a repository
+
+1. Install the Singular Code Review GitHub App on the target repository or on
+   the owning organization with access to that repository.
+2. Add these Actions secrets to the repository, or preferably as organization
+   secrets scoped to selected repositories:
+   - `SINGULAR_CODE_REVIEW_PRIVATE_KEY`: private key for the GitHub App.
+   - `OPENCODE_API_KEY`: OpenCode Go API key used by the reviewer.
+   - `CONTEXT7_API_KEY`: optional Context7 API key for higher rate limits.
+3. Optionally set the repository variable `OPENCODE_MODEL` to test a different
+   model. If omitted, the reusable workflow defaults to
+   `opencode-go/minimax-m2.7`.
+4. Copy `examples/singular-code-review.yml` into the target repository as
+   `.github/workflows/singular-code-review.yml`.
+5. Open a non-draft pull request, mark a draft pull request ready for review, or
+   comment `@singular-code-review` on a pull request.
+
+For one repository, secrets can be added directly:
+
+```bash
+gh secret set --repo OWNER/REPO SINGULAR_CODE_REVIEW_PRIVATE_KEY < app-private-key.pem
+gh secret set --repo OWNER/REPO OPENCODE_API_KEY --body "$OPENCODE_API_KEY"
+gh secret set --repo OWNER/REPO CONTEXT7_API_KEY --body "$CONTEXT7_API_KEY" # optional
+```
+
+For multiple trusted repositories, prefer organization secrets scoped to the
+selected repositories instead of copying values manually into each repository.
+
+The command trigger is plain text. GitHub may not render
+`@singular-code-review` as a taggable account because the reviewer identity is a
+GitHub App bot, but the workflow trigger only checks for that literal text in a
+pull request comment.
+
+The target repository does not receive a long-lived GitHub token. During each
+workflow run, `actions/create-github-app-token` uses the private key to mint a
+short-lived installation token for the App installation on that repository.
+That token is used for checkout, GitHub context reads, review comment replies,
+and the final batched review submission.
+
 ## Repository map
 
 - `Dockerfile` defines the reviewer image.
@@ -99,8 +160,8 @@ ghcr.io/we-are-singular/singular-code-review-agent:sha-<commit>
 ```
 
 Pull requests build the image without publishing it. The source repository can
-remain private while the GHCR package is made public for unauthenticated pulls
-from consuming repositories.
+be public while the GitHub App private key remains private in the trusted
+consuming repositories that run the workflow.
 
 ## Runtime Inputs
 
