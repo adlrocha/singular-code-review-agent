@@ -15,6 +15,7 @@ RIGHT-side changed lines, and submits one batched GitHub review.
 - `opencode/AGENTS.md` contains the review-only operating instructions.
 - `opencode/skills/` contains vendored reviewer skills copied into the image.
 - `.github/workflows/publish-image.yml` builds and publishes this image to GHCR.
+- `.github/workflows/review.yml` is the reusable workflow consumed by target repositories.
 - `examples/singular-code-review.yml` is a reference workflow for consuming repositories.
 - `test/` contains no-network tests with mocked `gh` and `opencode`.
 
@@ -24,7 +25,7 @@ The default base image is your known working OpenCode sandbox image:
 
 ```bash
 docker buildx imagetools inspect docker.io/cloudflare/sandbox:0.9.2-opencode
-docker build -t opencode-reviewer:local .
+docker build -t singular-code-review:local .
 ```
 
 If you verify a newer compatible OpenCode sandbox tag, override the base:
@@ -32,7 +33,7 @@ If you verify a newer compatible OpenCode sandbox tag, override the base:
 ```bash
 docker build \
   --build-arg BASE_IMAGE=docker.io/cloudflare/sandbox:<tag> \
-  -t opencode-reviewer:local .
+  -t singular-code-review:local .
 ```
 
 ## Publishing
@@ -137,10 +138,25 @@ npm test
 
 ## GitHub Actions
 
+This repository exposes `.github/workflows/review.yml` as a reusable workflow.
+Consuming repositories only need a small trigger workflow that calls it with
+`jobs.<job_id>.uses`:
+
+```yaml
+jobs:
+  review:
+    uses: we-are-singular/singular-code-review-agent/.github/workflows/review.yml@main
+```
+
+Use `@main` if consumers should receive central workflow changes immediately, or
+pin to a release tag such as `@v1` once you want a controlled update channel.
+Public consuming repositories can only call reusable workflows from public
+repositories, so this repository must be public for broad adoption.
+
 Copy `examples/singular-code-review.yml` into a consuming repository as
-`.github/workflows/singular-code-review.yml` to trigger
-reviews from PR comments containing `vars.OPENCODE_REVIEW_COMMAND`, defaulting
-to `@singular-code-review`.
+`.github/workflows/singular-code-review.yml` to trigger reviews from PR comments
+containing `vars.OPENCODE_REVIEW_COMMAND`, defaulting to
+`@singular-code-review`.
 
 A GitHub App can provide the posting identity and token, but review requests are
 for user logins and team slugs. Treat app mentions as text commands in PR
@@ -169,7 +185,7 @@ The GitHub App should be installed on the consuming repository with:
 - Issues: write
 - Pull requests: write
 
-`examples/singular-code-review.yml` mints an installation token with
+The reusable workflow mints an installation token with
 `actions/create-github-app-token` and uses that token for checkout, `gh`, and
 review submission. This keeps compute inside GitHub Actions while comments are
 authored by the app bot, for example `your-app[bot]`, instead of

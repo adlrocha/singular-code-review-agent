@@ -193,6 +193,32 @@ fi
   });
 });
 
+test("separates opencode run file attachments from the prompt", () => {
+  const harness = makeHarness(`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "run" && "\${2:-}" == "--help" ]]; then
+  exit 0
+fi
+if [[ "\${1:-}" == "run" ]]; then
+  printf '%s\\n' "$@" > "$OPENCODE_ARGS_FILE"
+  exit 0
+fi
+echo "unexpected opencode invocation: $*" >&2
+exit 1
+`);
+  const argsFile = path.join(harness.dir, "opencode-args.txt");
+
+  runOrchestrator(harness, {
+    OPENCODE_ARGS_FILE: argsFile
+  });
+
+  const args = fs.readFileSync(argsFile, "utf8").trimEnd().split("\n");
+  const separatorIndex = args.indexOf("--");
+  assert.notEqual(separatorIndex, -1);
+  assert.equal(args[separatorIndex - 1], path.join(harness.dir, "pr.diff"));
+  assert.match(args[separatorIndex + 1], /^Review this pull request using the normalized context /);
+});
+
 test("submits queued replies to existing review comments", () => {
   const harness = makeHarness(`#!/usr/bin/env bash
 set -euo pipefail

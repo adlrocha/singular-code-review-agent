@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 log() {
-  printf '[opencode-reviewer] %s\n' "$*" >&2
+  printf '[singular-code-review] %s\n' "$*" >&2
 }
 
 die() {
@@ -30,7 +30,7 @@ resolve_workspace() {
 install_opencode_runtime_config() {
   local home_dir="${HOME:-/root}"
   local config_file="$home_dir/.config/opencode/opencode.json"
-  local template_file="${OPENCODE_CONFIG_TEMPLATE:-/usr/local/share/opencode-reviewer/opencode.json}"
+  local template_file="${OPENCODE_CONFIG_TEMPLATE:-/usr/local/share/singular-code-review/opencode.json}"
 
   mkdir -p \
     "$home_dir/.config/opencode" \
@@ -115,7 +115,7 @@ run_opencode_review() {
 
   log "running OpenCode review"
   if opencode run --help >/tmp/opencode-run-help.txt 2>&1; then
-    (cd "$workspace" && opencode run --agent "${OPENCODE_AGENT:-coder}" --file "$context_file" --file "$diff_file" "$prompt")
+    (cd "$workspace" && opencode run --agent "${OPENCODE_AGENT:-coder}" --file "$context_file" --file "$diff_file" -- "$prompt")
   else
     (cd "$workspace" && opencode -q -c "$workspace" -p "$prompt")
   fi

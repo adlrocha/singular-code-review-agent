@@ -1,0 +1,150 @@
+name: Singular Code Review
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: Pull request number to review.
+        required: true
+        type: string
+      trigger_comment_id:
+        description: Issue comment ID that requested the review. Leave empty for manual or non-comment triggers.
+        required: false
+        type: string
+        default: ""
+      app_client_id:
+        description: GitHub App client ID used to mint the review token.
+        required: false
+        type: string
+        default: Iv23liVgvy1yaHapd0Wx
+      opencode_model:
+        description: Model ID used for OpenCode's configured agents.
+        required: false
+        type: string
+        default: opencode-go/minimax-m2.7
+      opencode_review_command:
+        description: PR comment command that requested the review.
+        required: false
+        type: string
+        default: "@singular-code-review"
+      image:
+        description: Container image to run for the reviewer.
+        required: false
+        type: string
+        default: ghcr.io/we-are-singular/singular-code-review-agent:latest
+    secrets:
+      SINGULAR_CODE_REVIEW_PRIVATE_KEY:
+        description: GitHub App private key used to author review comments.
+        required: true
+      OPENCODE_API_KEY:
+        description: OpenCode Go API key.
+        required: true
+      CONTEXT7_API_KEY:
+        description: Optional Context7 API key for higher rate limits.
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+  packages: read
+  pull-requests: write
+
+jobs:
+  ack:
+    runs-on: ubuntu-latest
+    outputs:
+      should_review: ${{ steps.direct.outputs.should_review || steps.ack.outputs.should_review || 'false' }}
+    steps:
+      - name: Mark direct invocation ready
+        id: direct
+        if: inputs.trigger_comment_id == ''
+        run: echo "should_review=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub App token
+        id: app-token
+        if: inputs.trigger_comment_id != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.app_client_id }}
+          private-key: ${{ secrets.SINGULAR_CODE_REVIEW_PRIVATE_KEY }}
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Acknowledge trigger comment
+        id: ack
+        if: inputs.trigger_comment_id != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          COMMENT_ID: ${{ inputs.trigger_comment_id }}
+          REVIEW_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
+        run: |
+          set -euo pipefail
+
+          existing="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}/reactions" \
+              --jq '.[] | select(.content == "eyes" and .user.login == env.REVIEW_BOT_LOGIN) | .id'
+          )"
+
+          if [[ -n "$existing" ]]; then
+            echo "should_review=false" >> "$GITHUB_OUTPUT"
+            echo "trigger comment already acknowledged by ${REVIEW_BOT_LOGIN}; skipping review"
+            exit 0
+          fi
+
+          gh api \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}/reactions" \
+            -f content='eyes' \
+            --silent
+
+          echo "should_review=true" >> "$GITHUB_OUTPUT"
+
+  review:
+    needs: ack
+    if: needs.ack.outputs.should_review == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.image }}
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.app_client_id }}
+          private-key: ${{ secrets.SINGULAR_CODE_REVIEW_PRIVATE_KEY }}
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: write
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Checkout PR head
+        run: gh pr checkout "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+
+      - name: Run Singular Code Review
+        run: /usr/local/bin/review_orchestrator.sh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          OPENCODE_MODEL: ${{ inputs.opencode_model }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
+          OPENCODE_REVIEW_COMMAND: ${{ inputs.opencode_review_command }}
+          REVIEW_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
