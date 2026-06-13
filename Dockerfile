@@ -18,6 +18,7 @@ RUN apt-get update \
       gnupg \
       jq \
       python3 \
+      ripgrep \
       xz-utils \
     && mkdir -p -m 755 /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -39,10 +40,13 @@ RUN set -eux; \
     esac; \
     node_archive="node-v${NODE_VERSION}-linux-${node_arch}.tar.xz"; \
     curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/${node_archive}"; \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack; \
+    rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack; \
     tar -xJf "${node_archive}" -C /usr/local --strip-components=1 --no-same-owner; \
     rm "${node_archive}"; \
     node --version; \
     npm --version; \
+    node -e 'require("/usr/local/lib/node_modules/npm/node_modules/minipass-flush")'; \
     node -e 'const min = process.argv[1].split(".").map(Number); const got = process.argv[2].split(".").map(Number); const ok = got[0] > min[0] || (got[0] === min[0] && (got[1] > min[1] || (got[1] === min[1] && got[2] >= min[2]))); if (!ok) { console.error(`npm ${got.join(".")} is below required ${min.join(".")}`); process.exit(1); }' "${NPM_MIN_VERSION}" "$(npm --version)"
 
 RUN mkdir -p /root/.config/opencode/skills \

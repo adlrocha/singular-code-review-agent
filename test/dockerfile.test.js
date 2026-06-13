@@ -12,7 +12,10 @@ test("reviewer image pins Node 26 and native addon build tooling", () => {
   assert.match(dockerfile, /^ARG NPM_MIN_VERSION=11\.13\.0$/m);
   assert.match(dockerfile, /\bbuild-essential\b/);
   assert.match(dockerfile, /\bpython3\b/);
+  assert.match(dockerfile, /\bripgrep\b/);
   assert.match(dockerfile, /\bxz-utils\b/);
+  assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
+  assert.match(dockerfile, /minipass-flush/);
   assert.match(dockerfile, /below required/);
   assert.match(dockerfile, /PYTHON=\/usr\/bin\/python3/);
 });
