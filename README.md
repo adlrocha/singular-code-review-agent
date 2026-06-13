@@ -126,7 +126,9 @@ dependencies, or starting OpenCode.
 Mention-triggered reviews are restricted to human `OWNER`, `MEMBER`, or
 `COLLABORATOR` comments and are still denied when the pull request head is a
 fork. The caller job also cancels older in-progress review runs for the same
-pull request so repeated commands do not run paid reviews in parallel.
+pull request, and the reusable workflow has the same PR-scoped concurrency
+guard for older copied client workflows. Repeated commands should not run paid
+reviews in parallel.
 
 This still assumes the consuming repository's branches and write collaborators
 are trusted enough to run code with the repository's Actions secrets. For public

@@ -25,8 +25,9 @@ test("example trigger workflow does not run reviews on every push", () => {
   assert.doesNotMatch(workflow, /"CONTRIBUTOR"/);
   assert.match(
     workflow,
-    /concurrency:\s*\n\s+group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.repository \}\}-\$\{\{ github\.event\.issue\.number \|\| github\.event\.pull_request\.number \|\| github\.event\.inputs\.pr_number \|\| github\.run_id \}\}\s*\n\s+cancel-in-progress: true/
+    /concurrency:\s*\n\s+group: singular-code-review-\$\{\{ github\.event\.issue\.number \|\| github\.event\.pull_request\.number \|\| github\.event\.inputs\.pr_number \}\}\s*\n\s+cancel-in-progress: true/
   );
+  assert.doesNotMatch(workflow, /packages: read/);
 });
 
 test("reusable review workflow guards unsafe requests before running the agent", () => {
@@ -36,6 +37,11 @@ test("reusable review workflow guards unsafe requests before running the agent",
   );
 
   assert.match(workflow, /\njobs:\s*\n\s+agent:/);
+  assert.match(
+    workflow,
+    /concurrency:\s*\n\s+group: singular-code-review-\$\{\{ inputs\.pr_number \}\}\s*\n\s+cancel-in-progress: true/
+  );
+  assert.doesNotMatch(workflow, /packages: read/);
   assert.match(workflow, /id: review-guard/);
   assert.match(workflow, /run: \/usr\/local\/bin\/review_guard\.sh/);
   assert.match(workflow, /if: steps\.review-guard\.outputs\.should_review == 'true'/);

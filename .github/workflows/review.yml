@@ -26,7 +26,6 @@ on:
 permissions:
   contents: read
   issues: write
-  packages: read
   pull-requests: write
 
 defaults:
@@ -36,6 +35,9 @@ defaults:
 jobs:
   agent:
     runs-on: ubuntu-latest
+    concurrency:
+      group: singular-code-review-${{ inputs.pr_number }}
+      cancel-in-progress: true
     container:
       image: ghcr.io/we-are-singular/singular-code-review-agent:latest
     steps:

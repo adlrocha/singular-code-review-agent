@@ -336,6 +336,33 @@ process.stdout.write(output);
 NODE
 }
 
+ensure_reviewer_banner() {
+  node -e '
+const fs = require("node:fs");
+
+const modelId = process.argv[1] || "opencode-go/minimax-m2.7";
+const model = modelId.split("/").filter(Boolean).pop() || modelId || "unknown";
+const input = fs.readFileSync(0, "utf8").trim();
+const lines = input.split(/\r?\n/);
+const bannerPattern = /^(?:>\s*)?\S+\s+·\s+.+$/;
+const reviewerPattern = /^Reviewer:\s*.+$/i;
+
+while (lines.length && !lines[0].trim()) {
+  lines.shift();
+}
+
+while (lines.length && (bannerPattern.test(lines[0].trim()) || reviewerPattern.test(lines[0].trim()))) {
+  lines.shift();
+  while (lines.length && !lines[0].trim()) {
+    lines.shift();
+  }
+}
+
+const body = lines.join("\n").trim();
+process.stdout.write(`> reviewer · ${model}${body ? `\n\n${body}` : ""}`);
+' "${OPENCODE_MODEL:-opencode-go/minimax-m2.7}"
+}
+
 build_static_fallback_conclusion() {
   local output_file="$1"
   local reviewer_output
@@ -369,7 +396,7 @@ run_opencode_conclusion_synthesis() {
   prompt="Write the final GitHub pull request review body for Singular Code Review. Use the sanitized reviewer output at ${reviewer_output_sanitized_file}, the final validated review queue at ${validated_file}, and the normalized review context at ${context_file}. The runner attaches all three files when supported.
 
 Desired shape:
-- Keep a leading reviewer/model banner when one is present, followed by a blank line.
+- Start directly with the review body content. The runner adds the reviewer/model banner after synthesis.
 - When the context contains a top-level @singular-code-review trigger question or instruction, begin with a concise direct answer addressed to the commenter by GitHub handle. Put that answer before the review summary.
 - Write a short Review Summary paragraph that explains what the PR changes and the overall review state.
 - Write Recommendations as a compact thematic summary of what the validated inline comments cover, such as input validation, API behavior, naming clarity, or test coverage. The inline comments carry line-by-line details; the body should group them into useful themes.
@@ -377,7 +404,7 @@ Desired shape:
 - Surface severe, dangerous, security-sensitive, or merge-blocking concerns explicitly in the body. Routine findings can stay summarized by theme.
 - Write a Verdict paragraph with practical merge guidance, severity, and appropriate reviewer tone. Include brief praise when the PR has a sound direction or useful improvement.
 
-Use the validated queue as the source for issue themes and severity. Use the context for trigger-comment answers and commenter handles. Use normal Markdown paragraphs separated by blank lines. Write only the final review body text to stdout."
+Use the validated queue as the source for issue themes and severity. Use the context for trigger-comment answers and commenter handles. Use normal Markdown paragraphs separated by blank lines. Write only the final review body text to stdout. The first paragraph should be a direct answer, Review Summary, or verdict, depending on the review context."
 
   log "running OpenCode conclusion synthesis"
   opencode_step \
@@ -562,6 +589,7 @@ main() {
     log "OpenCode conclusion synthesis was empty; using reviewer output as fallback conclusion"
     synthesized_conclusion="$(build_static_fallback_conclusion "$opencode_output_file")"
   fi
+  synthesized_conclusion="$(printf '%s\n' "$synthesized_conclusion" | ensure_reviewer_banner)"
   review_comments conclude --queue "$queue_file" --body "$synthesized_conclusion" >/dev/null
 
   review_comments validate --queue "$queue_file" --context "$context_file" --output "$validated_file" >"$validate_stdout_file"

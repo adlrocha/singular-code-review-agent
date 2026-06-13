@@ -155,7 +155,7 @@ review_comments add --path "src/app.js" --line "2" --body "The new timeout can b
 
   const payload = JSON.parse(fs.readFileSync(harness.apiPayloadFile, "utf8"));
   assert.equal(payload.event, "COMMENT");
-  assert.equal(payload.body, "Synthesized conclusion: one blocking finding.");
+  assert.equal(payload.body, "> reviewer · minimax-m2.7\n\nSynthesized conclusion: one blocking finding.");
   assert.equal(payload.comments.length, 1);
   assert.deepEqual(payload.comments[0], {
     path: "src/app.js",
@@ -202,7 +202,7 @@ review_comments add --path "src/app.js" --line "2" --body "This breaks callers w
   runOrchestrator(harness);
 
   const payload = JSON.parse(fs.readFileSync(harness.apiPayloadFile, "utf8"));
-  assert.equal(payload.body, "Synthesized conclusion: audited finding.");
+  assert.equal(payload.body, "> reviewer · minimax-m2.7\n\nSynthesized conclusion: audited finding.");
   assert.deepEqual(payload.comments, [
     {
       path: "src/app.js",
@@ -240,14 +240,15 @@ printf 'Polished synthesis: the PR only removes a blank line and has no blocking
   const countFile = path.join(harness.dir, "opencode-count");
 
   runOrchestrator(harness, {
-    OPENCODE_INVOCATION_COUNT_FILE: countFile
+    OPENCODE_INVOCATION_COUNT_FILE: countFile,
+    OPENCODE_MODEL: "opencode-go/minimax-m3"
   });
 
   const payload = JSON.parse(fs.readFileSync(harness.apiPayloadFile, "utf8"));
   assert.equal(payload.event, "COMMENT");
   assert.equal(
     payload.body,
-    "Polished synthesis: the PR only removes a blank line and has no blocking findings."
+    "> reviewer · minimax-m3\n\nPolished synthesis: the PR only removes a blank line and has no blocking findings."
   );
   assert.deepEqual(payload.comments, []);
   assert.equal(fs.readFileSync(countFile, "utf8"), "3");
@@ -416,6 +417,8 @@ exit 1
   assert.match(prompt, /Recommendations as a compact thematic summary/);
   assert.match(prompt, /no inlineComments and no replies/);
   assert.match(prompt, /trigger question or instruction/);
+  assert.match(prompt, /Start directly with the review body content/);
+  assert.match(prompt, /The runner adds the reviewer\/model banner after synthesis/);
 
   const payload = JSON.parse(fs.readFileSync(harness.apiPayloadFile, "utf8"));
   assert.equal(payload.body, "> reviewer · minimax-m2.7\n\nRequest changes: keep the queued finding.");
