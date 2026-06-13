@@ -293,6 +293,7 @@ exit 1
   assert.deepEqual(args.slice(0, 3), ["run", "--agent", "reviewer"]);
   assert.equal(args[separatorIndex - 1], path.join(harness.dir, "pr.diff"));
   assert.match(args[separatorIndex + 1], /^Review this pull request using the normalized context /);
+  assert.match(args[separatorIndex + 1], /top-level @singular-code-review trigger comment/);
 });
 
 test("keeps default review runtime files inside the git checkout", () => {

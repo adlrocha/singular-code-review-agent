@@ -140,7 +140,7 @@ run_opencode_review() {
   require_tool review_comments
   require_tool review_context
 
-  prompt="Review this pull request using the normalized context at ${context_file} and diff at ${diff_file}. Start by running review_context if you need the context JSON. Use read-only git, gh, rg, tests, and Context7 MCP as needed for investigation. Queue new findings with review_comments add, queue multiline findings with review_comments add --start-line, queue code suggestions with review_comments suggest, and queue replies to existing review discussions with review_comments reply. Do not queue a final conclusion; a second synthesis pass will turn your review output into the GitHub review body. Never use gh api to post review comments or reviews directly. Do not edit repository files."
+  prompt="Review this pull request using the normalized context at ${context_file} and diff at ${diff_file}. Start by running review_context if you need the context JSON. Use read-only git, gh, rg, tests, and Context7 MCP as needed for investigation. If a top-level @singular-code-review trigger comment asks a direct question or gives instructions, answer it at the top of your terminal output addressed to the commenter, then continue with the review. Queue new findings with review_comments add, queue multiline findings with review_comments add --start-line, queue code suggestions with review_comments suggest, and queue replies to existing review discussions with review_comments reply. Do not queue a final conclusion; a second synthesis pass will turn your review output into the GitHub review body. Never use gh api to post review comments or reviews directly. Do not edit repository files."
 
   log "running OpenCode review"
   if opencode run --help >/tmp/opencode-run-help.txt 2>&1; then
@@ -231,7 +231,7 @@ run_opencode_conclusion_synthesis() {
   require_tool opencode
 
   reviewer_output="$(sanitize_conclusion_text "$reviewer_output_file")"
-  prompt="The previous OpenCode reviewer produced terminal output for a pull request but did not queue a final GitHub review conclusion. Synthesize a concise, polished GitHub pull request review body from that output. Preserve any substantive findings, recommendations, and overall verdict. Do not invent issues that are not present. Do not call review_comments, gh, or any other posting tool. Write only the final review body text to stdout."
+  prompt="The previous OpenCode reviewer produced terminal output for a pull request but did not queue a final GitHub review conclusion. Synthesize a concise, polished GitHub pull request review body from that output. Preserve any direct answer to a top-level @singular-code-review trigger comment at the top of the body, addressed to the commenter by GitHub handle when present, then continue with the review summary and verdict. Do not convert direct answers into buried notes or indirect summaries such as 'a user asked'. Preserve any substantive findings, recommendations, and overall verdict. Do not invent issues that are not present. Do not call review_comments, gh, or any other posting tool. Write only the final review body text to stdout."
 
   log "running OpenCode conclusion synthesis"
   if opencode run --help >/tmp/opencode-run-help.txt 2>&1; then

@@ -9,6 +9,9 @@ GitHub review from a GitHub App identity.
 The project is designed to be operated centrally: this repository builds and
 publishes the reviewer image and exposes a reusable workflow, while consuming
 repositories opt in with a small trigger workflow and runtime secrets.
+The example trigger workflow runs on non-draft PR creation, when a draft PR is
+marked ready for review, or when someone posts a PR comment containing
+`@singular-code-review`; it does not run on every push to an existing PR.
 
 ## What it provides
 
@@ -127,7 +130,9 @@ synthesize the GitHub review body from the reviewer output. That body can be a
 single-line LGTM for simple pull requests or a sectioned summary covering
 changes, recommendations, and important flags when useful. It also tracks
 previous bot comments and reply action items so follow-up review runs can
-respond to existing threads when appropriate.
+respond to existing threads when appropriate. When a top-level
+`@singular-code-review` comment asks a direct question, the single review body
+answers the commenter first and then continues with the review summary.
 
 ## Vendored skills
 

@@ -10,6 +10,7 @@ Workflow:
 2. Use the installed `singular-code-review` skill for review workflow and evidence standards.
 3. Queue each valid inline finding, suggestion, or reply with `review_comments`; the runner will validate, batch, and submit queued items after you finish.
 4. Do not queue the final review conclusion. The runner performs a second synthesis pass over your terminal output and uses that pass as the GitHub review body.
+5. If `run.trigger_comment` or an `action_items` entry contains a direct user question or instruction from a top-level PR comment, answer it visibly in your terminal output before the review summary. Address the author by GitHub handle when available, for example `@octocat ...`, then continue with the normal review. Do not bury this as a "Note:" or describe it indirectly as something that was addressed.
 
 For every distinct logic error, security vulnerability, or architectural bug you find, you MUST stage an inline comment by running:
 
@@ -41,6 +42,7 @@ Rules:
 - Only target repository-relative paths and RIGHT-side changed lines from the supplied PR diff.
 - Do not stage style nits, speculative concerns, praise, conclusions, or comments for unchanged lines.
 - Put the overall summary, recommendations, important flags, and LGTM message in your terminal output, not inline comments.
+- Put direct answers to top-level `@singular-code-review` comments at the top of your terminal output, addressed to the commenter. This is the reply shape for top-level PR conversation comments; do not queue a separate comment for them.
 - Do not run `review_comments conclude`; final review body synthesis is handled by the runner after this pass.
 - Use `review_comments reply` for existing discussion follow-up instead of creating duplicate inline findings.
 - Use read-only `gh` commands freely for investigation, but never use `gh api` to post comments, reviews, or replies.
