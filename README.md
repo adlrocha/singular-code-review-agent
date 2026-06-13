@@ -9,9 +9,7 @@ GitHub review from a GitHub App identity.
 The project is designed to be operated centrally: this repository builds and
 publishes the reviewer image and exposes a reusable workflow, while consuming
 repositories opt in with a small trigger workflow and runtime secrets.
-The example trigger workflow runs on non-draft PR creation, when a draft PR is
-marked ready for review, or when someone posts a PR comment containing
-`@singular-code-review`; it does not run on every push to an existing PR.
+
 
 ## Distribution model
 
@@ -88,8 +86,8 @@ variable to try a different model without changing workflow YAML.
    secrets scoped to selected repositories:
    - `SINGULAR_CODE_REVIEW_PRIVATE_KEY`: private key for the GitHub App.
    - `OPENCODE_API_KEY`: OpenCode Go API key used by the reviewer.
-   - `CONTEXT7_API_KEY`: optional Context7 API key for higher rate limits.
-3. Optionally set the repository variable `OPENCODE_MODEL` to test a different
+   - `CONTEXT7_API_KEY`: optional Context7 API key.
+3. Optionally set the repository variable `OPENCODE_MODEL` to use a different
    model. If omitted, the reusable workflow defaults to
    `opencode-go/minimax-m2.7`.
 4. Copy `examples/singular-code-review.yml` into the target repository as
@@ -107,11 +105,6 @@ gh secret set --repo OWNER/REPO CONTEXT7_API_KEY --body "$CONTEXT7_API_KEY" # op
 
 For multiple trusted repositories, prefer organization secrets scoped to the
 selected repositories instead of copying values manually into each repository.
-
-The command trigger is plain text. GitHub may not render
-`@singular-code-review` as a taggable account because the reviewer identity is a
-GitHub App bot, but the workflow trigger only checks for that literal text in a
-pull request comment.
 
 The target repository does not receive a long-lived GitHub token. During each
 workflow run, `actions/create-github-app-token` uses the private key to mint a
@@ -197,20 +190,6 @@ image-global OpenCode instructions. Target repositories can still provide their
 own `AGENTS.md` files for project-specific context, but the image prompt remains
 authoritative for review-only behavior.
 
-The reviewer queues findings and replies through `review_comments` instead of
-posting them directly. The orchestrator is the only submitter, which allows it
-to validate positions against the current diff and submit one consolidated
-review. After the finding pass, the orchestrator validates the queue, runs a
-no-MCP queue audit pass, validates again, and then runs a no-MCP synthesis pass
-from the reviewer output and final validated queue. The audit and synthesis
-passes reuse one OpenCode session when JSON event output exposes a session id.
-The final body can be a single-line LGTM for simple pull requests or a sectioned
-summary covering changes, recommendations, and important flags when useful. It
-also tracks previous bot comments and reply action items so follow-up review
-runs can respond to existing threads when appropriate. When a top-level
-`@singular-code-review` comment asks a direct question, the single review body
-answers the commenter first and then continues with the review summary.
-
 Review text should be passed with stdin or files rather than shell-quoted inline
 arguments, for example:
 
@@ -236,10 +215,9 @@ The image vendors these skills from `we-are-singular/skills` at commit
 - `frontend-architecture`
 - `singular-code-review`
 
-The `git-commit-pr` skill is intentionally excluded. Vendoring keeps image
-builds reproducible and avoids pulling skill content with `npx` or GitHub during
-the Docker build. Update the snapshot by replacing the skill directories under
-`opencode/skills/` and updating `opencode/skills/VENDORED_SKILLS.md`.
+Vendoring keeps image builds reproducible and avoids pulling skill content with 
+`npx` or GitHub during the Docker build. Update the snapshot by replacing the skill 
+directories under `opencode/skills/` and updating `opencode/skills/VENDORED_SKILLS.md`.
 
 ## Local development
 
