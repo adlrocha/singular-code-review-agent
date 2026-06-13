@@ -17,3 +17,17 @@ test("example trigger workflow does not run reviews on every push", () => {
   assert.match(workflow, /issue_comment:\s*\n\s*types: \[created\]/);
   assert.match(workflow, /contains\(github\.event\.comment\.body, '@singular-code-review'\)/);
 });
+
+test("reusable review workflow keeps acknowledgment inside one job", () => {
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, ".github", "workflows", "review.yml"),
+    "utf8"
+  );
+
+  assert.match(workflow, /\njobs:\s*\n\s+review:/);
+  assert.doesNotMatch(workflow, /\n\s+ack:/);
+  assert.doesNotMatch(workflow, /\n\s+needs: ack/);
+  assert.match(workflow, /id: review-request/);
+  assert.match(workflow, /echo "should_review=false" >> "\$GITHUB_OUTPUT"/);
+  assert.match(workflow, /if: steps\.review-request\.outputs\.should_review == 'true'/);
+});

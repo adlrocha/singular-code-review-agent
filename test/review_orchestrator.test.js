@@ -414,6 +414,7 @@ exit 1
   assert(args.includes(path.join(harness.dir, "review_validated.json")));
   assert(args.includes(path.join(harness.dir, "review_context.json")));
   assert.match(prompt, /Recommendations as a compact thematic summary/);
+  assert.match(prompt, /no inlineComments and no replies/);
   assert.match(prompt, /trigger question or instruction/);
 
   const payload = JSON.parse(fs.readFileSync(harness.apiPayloadFile, "utf8"));

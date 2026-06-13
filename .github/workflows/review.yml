@@ -30,29 +30,23 @@ permissions:
   pull-requests: write
 
 jobs:
-  ack:
+  review:
     runs-on: ubuntu-latest
-    outputs:
-      should_review: ${{ steps.direct.outputs.should_review || steps.ack.outputs.should_review || 'false' }}
+    container:
+      image: ghcr.io/we-are-singular/singular-code-review-agent:latest
     steps:
-      - name: Mark direct invocation ready
-        id: direct
-        if: inputs.trigger_comment_id == ''
-        run: echo "should_review=true" >> "$GITHUB_OUTPUT"
-
       - name: Create GitHub App token
         id: app-token
-        if: inputs.trigger_comment_id != ''
         uses: actions/create-github-app-token@v3
         with:
           client-id: Iv23liVgvy1yaHapd0Wx
           private-key: ${{ secrets.SINGULAR_CODE_REVIEW_PRIVATE_KEY }}
+          permission-contents: read
           permission-issues: write
           permission-pull-requests: write
 
-      - name: Acknowledge trigger comment
-        id: ack
-        if: inputs.trigger_comment_id != ''
+      - name: Prepare review request
+        id: review-request
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -60,6 +54,12 @@ jobs:
           BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
         run: |
           set -euo pipefail
+
+          if [[ -z "${COMMENT_ID}" ]]; then
+            echo "should_review=true" >> "$GITHUB_OUTPUT"
+            echo "direct pull request trigger; continuing review"
+            exit 0
+          fi
 
           existing="$(
             gh api \
@@ -83,24 +83,8 @@ jobs:
 
           echo "should_review=true" >> "$GITHUB_OUTPUT"
 
-  review:
-    needs: ack
-    if: needs.ack.outputs.should_review == 'true'
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/we-are-singular/singular-code-review-agent:latest
-    steps:
-      - name: Create GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: Iv23liVgvy1yaHapd0Wx
-          private-key: ${{ secrets.SINGULAR_CODE_REVIEW_PRIVATE_KEY }}
-          permission-contents: read
-          permission-issues: read
-          permission-pull-requests: write
-
       - name: Checkout repository
+        if: steps.review-request.outputs.should_review == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -108,9 +92,11 @@ jobs:
           persist-credentials: false
 
       - name: Trust checkout directory
+        if: steps.review-request.outputs.should_review == 'true'
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Checkout PR head
+        if: steps.review-request.outputs.should_review == 'true'
         run: gh pr checkout "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -118,6 +104,7 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
 
       - name: Run Singular Code Review
+        if: steps.review-request.outputs.should_review == 'true'
         run: /usr/local/bin/review_orchestrator.sh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

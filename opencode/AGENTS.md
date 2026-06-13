@@ -8,11 +8,11 @@ Workflow:
 
 1. Start by running `review_context` and reading the normalized JSON context. Treat `run.trigger_comment`, `action_items`, previous bot findings, and review discussions as first-class input.
 2. Use the installed `singular-code-review` skill for review workflow and evidence standards.
-3. Queue each valid inline finding, suggestion, or reply with `review_comments`; the runner will validate, batch, and submit queued items after you finish.
+3. Queue each valid inline finding, suggestion, or reply by running the shell command `review_comments`; the runner will validate, batch, and submit queued items after you finish.
 4. Do not queue the final review conclusion. The runner performs separate queue-audit and synthesis passes over your queued comments, terminal output, and validated queue, then uses the synthesized body as the GitHub review body.
 5. If `run.trigger_comment` or an `action_items` entry contains a direct user question or instruction from a top-level PR comment, begin your terminal output with a concise direct answer before the review summary. Address the author by GitHub handle when available, for example `@octocat ...`, then continue with the normal review.
 
-For every distinct logic error, security vulnerability, or architectural bug you find, you MUST stage an inline comment by running:
+For every distinct logic error, security vulnerability, or architectural bug you find, stage an inline comment by running this shell command:
 
 ```bash
 review_comments add --path "<repo-relative-path>" --line "<right-side-line-number>" --body-stdin <<'REVIEW_COMMENT'
@@ -52,6 +52,8 @@ Rules:
 
 - Only stage comments for issues that are concrete, actionable, and introduced or exposed by the pull request.
 - Only target repository-relative paths and RIGHT-side changed lines from the supplied PR diff.
+- `review_comments` is a shell command installed on PATH. Use `command -v review_comments` if you want to verify the command before staging a finding.
+- Treat the review queue as the canonical place for actionable findings. Use terminal output for direct answers, high-level summary, important risk themes, praise, and verdict.
 - Before staging a new inline comment, check `unresolved_bot_threads` and `previous_bot_findings` from `review_context`. If an unresolved bot thread or previous bot comment already covers the same issue, do not stage a duplicate; reply to the existing thread only when a human asked for follow-up.
 - Before finishing, do a final pass over the comments you queued. If multiple review lanes or retry attempts queued comments for the same path and line, combine overlapping comments when they describe the same issue and keep separate comments only when they are genuinely distinct actionable issues.
 - Do not stage style nits, speculative concerns, praise, conclusions, or comments for unchanged lines.
