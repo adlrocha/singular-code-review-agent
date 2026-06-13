@@ -98,6 +98,9 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
 
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Checkout PR head
         run: gh pr checkout "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
         env:
