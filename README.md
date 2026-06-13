@@ -146,6 +146,11 @@ A GitHub App can provide the posting identity and token, but review requests are
 for user logins and team slugs. Treat app mentions as text commands in PR
 comments rather than relying on assigning the app as a reviewer.
 
+For PR comment triggers, the workflow first adds an `eyes` reaction to the
+triggering comment as the app bot. If that same app bot already reacted with
+`eyes`, the workflow skips the review so the same command comment is not
+processed twice.
+
 Set secrets for runtime keys:
 
 - `SINGULAR_CODE_REVIEW_PRIVATE_KEY` for the GitHub App that will author reviews
@@ -161,7 +166,7 @@ Optional repository variable overrides:
 The GitHub App should be installed on the consuming repository with:
 
 - Contents: read
-- Issues: read
+- Issues: write
 - Pull requests: write
 
 `examples/singular-code-review.yml` mints an installation token with
