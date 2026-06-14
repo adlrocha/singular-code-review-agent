@@ -51,6 +51,7 @@ test("example trigger workflow does not run reviews on every push", () => {
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(workflow, /contains\(github\.event\.comment\.body, '@singular-code-review'\)/);
   assert.match(workflow, /github\.event\.comment\.user\.type != 'Bot'/);
+  assert.match(workflow, /concurrency:\s*\n\s+group: singular-code-review-\$\{\{ github\.event\.issue\.number \|\| github\.event\.pull_request\.number \|\| github\.event\.inputs\.pr_number \}\}/);
   assert.doesNotMatch(workflow, /"CONTRIBUTOR"/);
 });
 
@@ -64,5 +65,6 @@ test("reusable workflow runs guard, ack, provisioning, and the new runner", () =
   assert.doesNotMatch(workflow, /review_guard\.sh/);
   assert.doesNotMatch(workflow, /review_ack\.sh/);
   assert.doesNotMatch(workflow, /review_orchestrator/);
-  assert.match(workflow, /concurrency:\s*\n\s+group: singular-code-review-\$\{\{ inputs\.pr_number \}\}/);
+  assert.doesNotMatch(workflow, /concurrency:/);
+  assert.doesNotMatch(workflow, /singular-code-review-\$\{\{ inputs\.pr_number \}\}/);
 });
