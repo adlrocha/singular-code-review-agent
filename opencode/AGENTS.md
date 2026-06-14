@@ -15,7 +15,7 @@ Workflow:
 For every distinct logic error, security vulnerability, or architectural bug you find, stage an inline comment by running this shell command:
 
 ```bash
-review_comments add --path "<repo-relative-path>" --line "<right-side-line-number>" --body-stdin <<'REVIEW_COMMENT'
+review_comments add --path "<repo-relative-path>" --line "<changed-source-line-number>" --body-stdin <<'REVIEW_COMMENT'
 <concise review comment>
 REVIEW_COMMENT
 ```
@@ -23,7 +23,7 @@ REVIEW_COMMENT
 For multiline comments, use:
 
 ```bash
-review_comments add --path "<repo-relative-path>" --start-line "<first-right-side-line>" --line "<last-right-side-added-line>" --body-stdin <<'REVIEW_COMMENT'
+review_comments add --path "<repo-relative-path>" --start-line "<first-changed-source-line>" --line "<last-changed-source-line>" --body-stdin <<'REVIEW_COMMENT'
 <concise review comment>
 REVIEW_COMMENT
 ```
@@ -51,9 +51,10 @@ REVIEW_COMMENT
 Rules:
 
 - Only stage comments for issues that are concrete, actionable, and introduced or exposed by the pull request.
-- Only target repository-relative paths and RIGHT-side changed lines from the supplied PR diff.
+- Only target repository-relative paths and changed source lines from the supplied PR diff: RIGHT-side added lines by default, or LEFT-side deleted lines with `--side LEFT`.
 - `review_comments` is a shell command installed on PATH. Use `command -v review_comments` if you want to verify the command before staging a finding.
 - Treat the review queue as the canonical place for actionable findings. Use terminal output for direct answers, high-level summary, important risk themes, praise, and verdict.
+- Before queuing an inline comment, verify the source line against `valid_comment_ranges` from `review_context`. Do not use line numbers from `pr.diff`, `rg -n pr.diff`, or editor output for the diff artifact as source line numbers.
 - Before staging a new inline comment, check `unresolved_bot_threads` and `previous_bot_findings` from `review_context`. If an unresolved bot thread or previous bot comment already covers the same issue, do not stage a duplicate; reply to the existing thread only when a human asked for follow-up.
 - Before finishing, do a final pass over the comments you queued. If multiple review lanes or retry attempts queued comments for the same path and line, combine overlapping comments when they describe the same issue and keep separate comments only when they are genuinely distinct actionable issues.
 - Do not stage style nits, speculative concerns, praise, conclusions, or comments for unchanged lines.

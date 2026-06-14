@@ -2,12 +2,14 @@ diff --git a/src/app.js b/src/app.js
 index 2b3c4d5..6e7f8a9 100644
 --- a/src/app.js
 +++ b/src/app.js
-@@ -1,3 +1,4 @@
+@@ -1,4 +1,6 @@
  const enabled = true;
 +const timeoutMs = Number(process.env.TIMEOUT_MS);
  function run() {
-   return enabled;
+-  return enabled;
++  return timeoutMs > 0;
  }
++run();
 diff --git a/src/new.js b/src/new.js
 new file mode 100644
 index 0000000..1111111

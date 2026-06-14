@@ -53,35 +53,43 @@ RUN mkdir -p /root/.config/opencode/skills \
     /root/.local/share/opencode \
     /root/.cache/opencode \
     /root/.local/state/opencode \
+    /usr/local/lib/singular-code-review \
     /usr/local/share/singular-code-review \
     /workspace
+
+WORKDIR /tmp/singular-code-review-build
+COPY package.json package-lock.json tsconfig.json ./
+COPY scripts/ ./scripts/
+COPY src/ ./src/
+RUN npm ci \
+    && npm run build \
+    && npm prune --omit=dev \
+    && cp -R dist node_modules package.json /usr/local/lib/singular-code-review/ \
+    && chmod +x /usr/local/lib/singular-code-review/dist/cli/review-ack.js \
+      /usr/local/lib/singular-code-review/dist/cli/review-comments.js \
+      /usr/local/lib/singular-code-review/dist/cli/review-context.js \
+      /usr/local/lib/singular-code-review/dist/cli/review-guard.js \
+      /usr/local/lib/singular-code-review/dist/cli/review-runner.js \
+    && rm -rf /tmp/singular-code-review-build
 
 COPY opencode/opencode.json /root/.config/opencode/opencode.json
 COPY opencode/opencode.json /usr/local/share/singular-code-review/opencode.json
 COPY opencode/AGENTS.md /root/.config/opencode/AGENTS.md
 COPY opencode/AGENTS.md /usr/local/share/singular-code-review/AGENTS.md
 COPY opencode/skills/ /root/.config/opencode/skills/
-COPY lib/review-tools.js /usr/local/lib/review-tools.js
-COPY bin/stage_review_comment /usr/local/bin/stage_review_comment
-COPY bin/filter_review_comments /usr/local/bin/filter_review_comments
-COPY bin/review_comments /usr/local/bin/review_comments
-COPY bin/review_context /usr/local/bin/review_context
+COPY opencode/skills/ /usr/local/share/singular-code-review/skills/
 COPY bin/review_dry_run /usr/local/bin/review_dry_run
-COPY bin/review_ack.sh /usr/local/bin/review_ack.sh
-COPY bin/review_guard.sh /usr/local/bin/review_guard.sh
-COPY bin/opencode_step /usr/local/bin/opencode_step
-COPY bin/review_orchestrator.sh /usr/local/bin/review_orchestrator.sh
+COPY bin/provision.sh /usr/local/bin/provision.sh
+
+RUN ln -sf /usr/local/lib/singular-code-review/dist/cli/review-comments.js /usr/local/bin/review_comments \
+    && ln -sf /usr/local/lib/singular-code-review/dist/cli/review-context.js /usr/local/bin/review_context \
+    && ln -sf /usr/local/lib/singular-code-review/dist/cli/review-runner.js /usr/local/bin/review_runner \
+    && ln -sf /usr/local/lib/singular-code-review/dist/cli/review-ack.js /usr/local/bin/review_ack \
+    && ln -sf /usr/local/lib/singular-code-review/dist/cli/review-guard.js /usr/local/bin/review_guard
 
 RUN chmod +x \
-      /usr/local/bin/stage_review_comment \
-      /usr/local/bin/filter_review_comments \
-      /usr/local/bin/review_comments \
-      /usr/local/bin/review_context \
       /usr/local/bin/review_dry_run \
-      /usr/local/bin/review_ack.sh \
-      /usr/local/bin/review_guard.sh \
-      /usr/local/bin/opencode_step \
-      /usr/local/bin/review_orchestrator.sh
+      /usr/local/bin/provision.sh
 
 ENV OPENCODE_DISABLE_CLAUDE_CODE=1 \
     OPENCODE_DISABLE_AUTOUPDATE=true \

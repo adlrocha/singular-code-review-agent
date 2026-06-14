@@ -48,7 +48,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr_number }}
           TRIGGER_COMMENT_ID: ${{ inputs.trigger_comment_id }}
-        run: /usr/local/bin/review_guard.sh
+        run: /usr/local/bin/review_guard
 
       - name: Create GitHub App token
         if: steps.review-guard.outputs.should_review == 'true'
@@ -69,7 +69,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           COMMENT_ID: ${{ inputs.trigger_comment_id }}
           BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
-        run: /usr/local/bin/review_ack.sh
+        run: /usr/local/bin/review_ack
 
       - name: Checkout repository
         if: steps.review-request.outputs.should_review == 'true'
@@ -93,7 +93,9 @@ jobs:
 
       - name: Run Singular Code Review
         if: steps.review-request.outputs.should_review == 'true'
-        run: /usr/local/bin/review_orchestrator.sh
+        run: |
+          /usr/local/bin/provision.sh
+          /usr/local/bin/review_runner
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}

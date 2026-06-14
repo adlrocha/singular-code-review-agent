@@ -1,16 +1,29 @@
 {
   "name": "singular-code-review-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Containerized OpenCode inline PR reviewer source package.",
-  "type": "commonjs",
+  "description": "Production runner for Singular Code Review GitHub App reviews.",
+  "type": "module",
   "scripts": {
-    "test": "node --test",
-    "test:stage": "node --test test/stage_review_comment.test.js",
-    "test:filter": "node --test test/filter_review_comments.test.js",
-    "test:orchestrator": "node --test test/review_orchestrator.test.js"
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "test": "npm run build && node --test test/*.test.js"
+  },
+  "bin": {
+    "review_runner": "dist/cli/review-runner.js",
+    "review_comments": "dist/cli/review-comments.js",
+    "review_context": "dist/cli/review-context.js",
+    "review_guard": "dist/cli/review-guard.js",
+    "review_ack": "dist/cli/review-ack.js",
+    "review_dry_run": "bin/review_dry_run"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0"
   }
 }

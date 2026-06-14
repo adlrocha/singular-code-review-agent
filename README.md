@@ -36,41 +36,44 @@ workflow file and the runtime secrets required by that workflow.
 ## What it provides
 
 - A reproducible Docker image built from an OpenCode sandbox base image.
-- A reusable GitHub Actions workflow that checks out a pull request, prepares
-  the reviewer runtime, and runs the review orchestrator.
-- A review orchestration script that gathers pull-request context, executes
-  OpenCode, filters staged findings to valid diff positions, and submits the
-  final review payload.
+- A reusable GitHub Actions workflow that checks out a pull request, provisions
+  the reviewer runtime, and runs the TypeScript review runner.
+- A TypeScript runner that gathers pull-request context, executes OpenCode,
+  validates staged findings, builds the final review payload, and submits it
+  through a GitHub App token.
 - Local review tools that let the agent stage inline comments, multiline
   comments, suggestions, replies, and the synthesized overall conclusion before
   submission.
 - A review-only OpenCode prompt and vendored reviewer skills that keep the
   agent focused on actionable code review feedback.
-- No-network test coverage for the review tools and orchestrator behavior using
-  mocked command-line dependencies.
+- No-network test coverage for the review contracts, OpenCode client, guard/ack
+  decisions, runner pipeline, workflow, and image packaging.
 
 ## How it works
 
 At runtime, the reusable workflow mints a GitHub App installation token and uses
-that token for checkout, `gh` operations, and review submission. The container
-then runs `bin/review_orchestrator.sh`, which:
+that token for checkout, context reads, review replies, and review submission.
+The container then runs `provision.sh` followed by `review_runner`.
+Provisioning installs the committed OpenCode config and target-repository
+dependencies. The runner then:
 
-1. fetches normalized pull-request context with `bin/review_context`;
+1. fetches normalized pull-request context with `review_context`;
 2. starts OpenCode with the bundled configuration and review-only prompt;
-3. lets the agent queue findings and replies through `bin/review_comments`;
+3. lets the agent queue findings and replies through `review_comments`;
 4. validates queued comments against the current diff;
 5. runs a no-MCP OpenCode audit pass that edits the queue file to remove
    duplicates, merge overlapping comments, and keep distinct same-line findings;
-6. validates the audited queue so only valid RIGHT-side changed lines are
+6. validates the audited queue so only valid RIGHT-side additions and LEFT-side deletions are
    submitted;
 7. runs a no-MCP OpenCode pass to synthesize the final review body from the
    reviewer output and validated queue;
 8. posts a single GitHub review whose body uses the synthesized conclusion and
    any queued inline comments, plus any queued replies.
 
-OpenCode invocations are routed through `bin/opencode_step`, which keeps raw
-JSON event streams as runtime artifacts when supported and reuses the same
-post-processing OpenCode session for queue audit and final synthesis.
+OpenCode invocations are routed through `src/clients/opencode.ts`, which keeps
+rendered output and raw JSON event streams as runtime artifacts when supported
+and reuses the same post-processing OpenCode session for queue audit and final
+synthesis.
 
 The image keeps credentials out of the build. Runtime secrets are provided by
 the consuming repository, while reviewer settings such as the command trigger,
@@ -139,23 +142,21 @@ repositories that accept arbitrary fork PRs, keep this workflow on the normal
 ## Repository map
 
 - `Dockerfile` defines the reviewer image.
-- `bin/review_orchestrator.sh` coordinates context collection, OpenCode
-  execution, review payload creation, and submission.
-- `bin/review_context` collects pull-request metadata, mentions, previous bot
+- `bin/provision.sh` prepares OpenCode config, trusts the checkout directory,
+  and installs target-repository dependencies.
+- `review_runner` runs the TypeScript review pipeline.
+- `review_context` collects pull-request metadata, mentions, previous bot
   comments, review thread state when available, valid diff lines, and action
   items.
-- `bin/review_comments` is the staging interface used by OpenCode and the
-  orchestrator for comments, suggestions, multiline findings, replies, the
-  synthesized review conclusion, listing, and status checks.
+- `review_comments` is the staging interface used by OpenCode and the
+  runner for comments, suggestions, multiline findings, replies, listing, and
+  status checks.
+- `review_guard` and `review_ack` are typed GitHub Actions preflight
+  helpers for trigger authorization and idempotent request acknowledgment.
 - `bin/review_dry_run` checks out a real GitHub pull request into a disposable
-  workspace and runs the normal orchestrator with GitHub writes blocked.
-- `bin/opencode_step` is the OpenCode CLI adapter used by the orchestrator. It
-  handles feature detection, JSON event rendering, raw JSONL logs, and explicit
-  session continuation.
-- `bin/stage_review_comment` and `bin/filter_review_comments` are compatibility
-  wrappers around the review-comment tooling.
-- `lib/review-tools.js` contains the shared implementation for staging,
-  filtering, and validating review comments.
+  workspace and runs the normal runner with GitHub writes blocked.
+- `src/` contains the review runner, GitHub and OpenCode clients, prompt assets,
+  queue/diff/body contracts, config loading, and runtime artifact helpers.
 - `opencode/AGENTS.md` is the image-global review prompt.
 - `opencode/opencode.json` configures OpenCode and reads secrets through
   environment placeholders.
@@ -165,7 +166,7 @@ repositories that accept arbitrary fork PRs, keep this workflow on the normal
   repositories.
 - `examples/singular-code-review.yml` is an example trigger workflow for a
   consuming repository.
-- `test/` contains Node test suites with mocked `gh` and `opencode` commands.
+- `test/` contains Node test suites for the stable production contracts.
 
 ## Published image
 
@@ -186,10 +187,10 @@ The reusable workflow exposes only the pull request/comment identifiers as
 inputs. It owns the GitHub App client ID, command trigger, container image,
 OpenCode model, and OpenCode agent.
 
-The orchestrator receives these required runtime environment variables from the
+The runner receives these required runtime environment variables from the
 reusable workflow:
 
-- `GH_TOKEN`: token used by the GitHub CLI and review submission.
+- `GH_TOKEN`: token used by Octokit for GitHub context reads and writes.
 - `GITHUB_REPOSITORY`: repository in `owner/name` form.
 - `PR_NUMBER`: pull request number to review.
 - `OPENCODE_API_KEY`: OpenCode Go API key consumed by the bundled provider
@@ -203,9 +204,12 @@ Optional runtime environment variables:
 - `DRY_RUN=true`: local development override that prints the final review
   payload instead of submitting it.
 
-Dependency installation is automatic when the checked-out pull-request workspace
-contains `package.json`. The runner chooses `pnpm`, `yarn`, or `npm` based on the
-lockfile present in the workspace.
+Dependency installation is automatic during `bin/provision.sh` when the
+checked-out pull-request workspace contains `package.json`. Provisioning chooses
+`pnpm`, `yarn`, or `npm` based on the lockfile present in the workspace. For
+npm workspaces, provisioning passes `--dangerously-allow-all-scripts` so
+required install-time builds such as native modules and generated clients run
+inside the reviewer sandbox.
 
 ## Reviewer behavior
 
@@ -245,7 +249,8 @@ directories under `opencode/skills/` and updating `opencode/skills/VENDORED_SKIL
 
 ## Local development
 
-The local test suite uses Node's built-in test runner and mocked external CLIs:
+The local test suite builds the TypeScript runner and uses Node's built-in test
+runner with mocked external clients:
 
 ```bash
 npm test
@@ -270,7 +275,11 @@ OPENCODE_API_KEY=... bin/review_dry_run owner/repo 123
 
 The command clones the target repository into `/tmp/singular-code-review-dry-run`,
 checks out the PR head, sets `DRY_RUN=true`, and puts a read-only `gh` wrapper in
-front of the review process. The orchestrator prints the final review payload to
-stdout and keeps artifacts under the checkout's `.git/singular-code-review/`
-directory, including `final_review.json`, `review_validated.json`,
+front of OpenCode investigation. The runner prints the final review payload to
+stdout and keeps artifacts under `/tmp/.singular-code-review/`, including
+`review_payload.json`, `review_validated.json`,
 `review_context.json`, `pr.diff`, and the OpenCode output logs.
+
+Use `--runtime-dir <path>` or `SINGULAR_CODE_REVIEW_RUNTIME_DIR=<path>` when
+running dry-runs inside a disposable container so artifacts are written to a
+mounted or otherwise persistent directory.

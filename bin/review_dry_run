@@ -7,13 +7,15 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat >&2 <<'EOF'
 usage:
-  review_dry_run <owner/repo> <pr-number> [--workspace <path>]
-  review_dry_run --repo <owner/repo> --pr <pr-number> [--workspace <path>]
+  review_dry_run <owner/repo> <pr-number> [--workspace <path>] [--runtime-dir <path>]
+  review_dry_run --repo <owner/repo> --pr <pr-number> [--workspace <path>] [--runtime-dir <path>]
 
-Runs the real Singular Code Review orchestrator against a real GitHub pull
-request, but sets DRY_RUN=true and installs a read-only gh wrapper for the
-review process. The final review payload is printed by the orchestrator and
-kept under the checkout's .git/singular-code-review directory.
+Runs the Singular Code Review runner against a real GitHub pull request, but
+sets DRY_RUN=true and installs a read-only gh wrapper for OpenCode
+investigation. The final review payload is printed by the runner and kept under
+the runtime directory. By default artifacts are stored under
+/tmp/.singular-code-review; pass --runtime-dir or SINGULAR_CODE_REVIEW_RUNTIME_DIR
+to keep them somewhere mounted or persistent.
 EOF
 }
 
@@ -34,10 +36,21 @@ slugify_repo() {
   printf '%s' "$1" | tr '/:' '--' | tr -cd '[:alnum:]._-' | tr '[:upper:]' '[:lower:]'
 }
 
+resolve_dist_dir() {
+  if [[ -n "${SINGULAR_CODE_REVIEW_DIST_DIR:-}" ]]; then
+    printf '%s\n' "$SINGULAR_CODE_REVIEW_DIST_DIR"
+  elif [[ -f "${REPO_ROOT}/dist/cli/review-runner.js" ]]; then
+    printf '%s\n' "${REPO_ROOT}/dist"
+  else
+    printf '%s\n' "/usr/local/lib/singular-code-review/dist"
+  fi
+}
+
 parse_args() {
   repo=""
   pr_number=""
   workspace=""
+  runtime_dir=""
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -54,6 +67,11 @@ parse_args() {
       --workspace)
         [[ "$#" -ge 2 ]] || die "--workspace requires a value"
         workspace="$2"
+        shift 2
+        ;;
+      --runtime-dir)
+        [[ "$#" -ge 2 ]] || die "--runtime-dir requires a value"
+        runtime_dir="$2"
         shift 2
         ;;
       -h|--help)
@@ -217,6 +235,57 @@ WRAPPER
   chmod +x "${wrapper_dir}/gh"
 }
 
+artifact_line() {
+  local label="$1"
+  local file="$2"
+
+  if [[ -e "$file" ]]; then
+    log "  ${label}: ${file}"
+  else
+    log "  ${label}: ${file} (missing)"
+  fi
+}
+
+report_artifacts() {
+  local runtime_dir="$1"
+
+  log "dry-run artifacts:"
+  artifact_line "review payload" "${runtime_dir}/review_payload.json"
+  artifact_line "validated queue" "${runtime_dir}/review_validated.json"
+  artifact_line "review context" "${runtime_dir}/review_context.json"
+  artifact_line "PR diff" "${runtime_dir}/pr.diff"
+  artifact_line "reviewer output" "${runtime_dir}/opencode_review.log"
+  artifact_line "audit output" "${runtime_dir}/opencode_audit.log"
+  artifact_line "synthesis output" "${runtime_dir}/opencode_synthesis.log"
+}
+
+install_node_commands() {
+  local wrapper_dir="$1"
+  local dist_dir
+  dist_dir="$(resolve_dist_dir)"
+
+  local commands=(
+    "review_ack:review-ack.js"
+    "review_comments:review-comments.js"
+    "review_context:review-context.js"
+    "review_guard:review-guard.js"
+    "review_runner:review-runner.js"
+  )
+
+  local entry
+  local command
+  local script
+  local target
+  for entry in "${commands[@]}"; do
+    command="${entry%%:*}"
+    script="${entry#*:}"
+    target="${dist_dir}/cli/${script}"
+    [[ -f "$target" ]] || die "built CLI entrypoint not found: $target; run npm run build first"
+    chmod +x "$target"
+    ln -sf "$target" "${wrapper_dir}/${command}"
+  done
+}
+
 main() {
   parse_args "$@"
   require_tool gh
@@ -227,44 +296,97 @@ main() {
 
   "$real_gh" auth status >/dev/null 2>&1 || die "gh auth status failed; authenticate with gh before running a dry run"
   [[ -n "${OPENCODE_API_KEY:-}" ]] || die "OPENCODE_API_KEY is required for the OpenCode review pass"
+  local github_token
+  github_token="${GH_TOKEN:-$("$real_gh" auth token)}"
+
+  local slug
+  slug="$(slugify_repo "$repo")"
 
   if [[ -z "$workspace" ]]; then
-    local slug
-    slug="$(slugify_repo "$repo")"
     workspace="${TMPDIR:-/tmp}/singular-code-review-dry-run/${slug}-pr-${pr_number}-$(date +%Y%m%d%H%M%S)"
   fi
 
   prepare_workspace "$repo" "$pr_number" "$workspace" "$real_gh"
 
-  local runtime_dir="${workspace}/.git/singular-code-review"
+  if [[ -z "$runtime_dir" ]]; then
+    runtime_dir="${SINGULAR_CODE_REVIEW_RUNTIME_DIR:-}"
+  fi
+  if [[ -z "$runtime_dir" ]]; then
+    runtime_dir="${TMPDIR:-/tmp}/.singular-code-review/${slug}-pr-${pr_number}-$(date +%Y%m%d%H%M%S)"
+  fi
+
   local wrapper_dir="${runtime_dir}/dry-run-bin"
-  local orchestrator="${REVIEW_ORCHESTRATOR:-${REPO_ROOT}/bin/review_orchestrator.sh}"
-  mkdir -p "$runtime_dir"
+  local provision="${REVIEW_PROVISION:-${REPO_ROOT}/bin/provision.sh}"
+  if [[ ! -x "$provision" && -x "/usr/local/bin/provision.sh" ]]; then
+    provision="/usr/local/bin/provision.sh"
+  fi
+  local runner="${REVIEW_RUNNER:-${wrapper_dir}/review_runner}"
+  local dry_run_home="${runtime_dir}/home"
+  local dry_run_config_home="${runtime_dir}/xdg/config"
+  local dry_run_data_home="${runtime_dir}/xdg/data"
+  local dry_run_cache_home="${runtime_dir}/xdg/cache"
+  local dry_run_state_home="${runtime_dir}/xdg/state"
+  mkdir -p \
+    "$runtime_dir" \
+    "$dry_run_home" \
+    "$dry_run_config_home" \
+    "$dry_run_data_home" \
+    "$dry_run_cache_home" \
+    "$dry_run_state_home"
   install_read_only_gh_wrapper "$wrapper_dir"
+  install_node_commands "$wrapper_dir"
 
   log "dry-run workspace: $workspace"
   log "dry-run runtime dir: $runtime_dir"
-  log "running orchestrator without GitHub writes"
+  log "running reviewer without GitHub writes"
 
   set +e
-  PATH="${wrapper_dir}:${REPO_ROOT}/bin:${PATH}" \
+  log "running provision step"
+  PATH="${wrapper_dir}:${PATH}" \
+    HOME="$dry_run_home" \
+    XDG_CONFIG_HOME="$dry_run_config_home" \
+    XDG_DATA_HOME="$dry_run_data_home" \
+    XDG_CACHE_HOME="$dry_run_cache_home" \
+    XDG_STATE_HOME="$dry_run_state_home" \
     SINGULAR_CODE_REVIEW_REAL_GH="$real_gh" \
     WORKSPACE="$workspace" \
     GITHUB_REPOSITORY="$repo" \
     PR_NUMBER="$pr_number" \
+    GH_TOKEN="$github_token" \
     DRY_RUN=true \
-    "$orchestrator"
-  local status=$?
+    SINGULAR_CODE_REVIEW_RUNTIME_DIR="$runtime_dir" \
+    "$provision"
+  local provision_status=$?
+  local status="$provision_status"
+  if [[ "$provision_status" -eq 0 ]]; then
+    log "provision step finished"
+    log "running review runner"
+    PATH="${wrapper_dir}:${PATH}" \
+      HOME="$dry_run_home" \
+      XDG_CONFIG_HOME="$dry_run_config_home" \
+      XDG_DATA_HOME="$dry_run_data_home" \
+      XDG_CACHE_HOME="$dry_run_cache_home" \
+      XDG_STATE_HOME="$dry_run_state_home" \
+      SINGULAR_CODE_REVIEW_REAL_GH="$real_gh" \
+      WORKSPACE="$workspace" \
+      GITHUB_REPOSITORY="$repo" \
+      PR_NUMBER="$pr_number" \
+      GH_TOKEN="$github_token" \
+      DRY_RUN=true \
+      SINGULAR_CODE_REVIEW_RUNTIME_DIR="$runtime_dir" \
+      "$runner"
+    status=$?
+    if [[ "$status" -eq 0 ]]; then
+      log "review runner finished"
+    else
+      log "review runner failed with status $status"
+    fi
+  else
+    log "provision step failed with status $provision_status; review runner was not started"
+  fi
   set -e
 
-  log "dry-run artifacts:"
-  log "  final review payload: ${runtime_dir}/final_review.json"
-  log "  validated queue: ${runtime_dir}/review_validated.json"
-  log "  review context: ${runtime_dir}/review_context.json"
-  log "  PR diff: ${runtime_dir}/pr.diff"
-  log "  reviewer output: ${runtime_dir}/opencode_review_output.log"
-  log "  audit output: ${runtime_dir}/opencode_review_audit.log"
-  log "  synthesis output: ${runtime_dir}/opencode_review_conclusion.log"
+  report_artifacts "$runtime_dir"
 
   exit "$status"
 }

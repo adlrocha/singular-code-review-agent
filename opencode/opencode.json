@@ -3,11 +3,12 @@
   "default_agent": "reviewer",
   "model": "{env:OPENCODE_MODEL}",
   "permission": {
+    "external_directory": {
+      "/tmp/.singular-code-review/**": "allow"
+    },
     "edit": {
       "*": "deny",
-      ".git/singular-code-review/review_queue.json": "allow",
-      "**/.git/singular-code-review/review_queue.json": "allow",
-      "/**/.git/singular-code-review/review_queue.json": "allow"
+      "/tmp/.singular-code-review/**": "allow"
     },
     "bash": "allow",
     "webfetch": "allow"
@@ -19,11 +20,12 @@
       "model": "{env:OPENCODE_MODEL}",
       "prompt": "{file:./AGENTS.md}",
       "permission": {
+        "external_directory": {
+          "/tmp/.singular-code-review/**": "allow"
+        },
         "edit": {
           "*": "deny",
-          ".git/singular-code-review/review_queue.json": "allow",
-          "**/.git/singular-code-review/review_queue.json": "allow",
-          "/**/.git/singular-code-review/review_queue.json": "allow"
+          "/tmp/.singular-code-review/**": "allow"
         },
         "bash": "allow",
         "webfetch": "allow"

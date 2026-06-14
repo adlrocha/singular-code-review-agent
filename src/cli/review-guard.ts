@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+import { createGitHubClient } from "../clients/github.js";
+import { REVIEW_COMMAND } from "../review/types.js";
+import { runCliMain } from "../shared/cli-main.js";
+
+function output(name: string, value: string, env: NodeJS.ProcessEnv): void {
+  if (env.GITHUB_OUTPUT) {
+    appendFileSync(env.GITHUB_OUTPUT, `${name}=${value}\n`);
+  }
+}
+
+function allow(env: NodeJS.ProcessEnv): void {
+  output("should_review", "true", env);
+  output("reason", "allowed", env);
+  process.stderr.write("[singular-code-review] review guard allowed request\n");
+}
+
+function deny(reason: string, env: NodeJS.ProcessEnv): void {
+  output("should_review", "false", env);
+  output("reason", reason, env);
+  process.stderr.write(`[singular-code-review] review guard skipped request: ${reason}\n`);
+}
+
+function required(value: string | undefined, name: string): string {
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
+function trustedAssociation(value: string | null | undefined): boolean {
+  return value === "OWNER" || value === "MEMBER" || value === "COLLABORATOR";
+}
+
+function parseIssueUrl(value: string | null | undefined): { repository: string; issueNumber: number } | null {
+  if (!value) {
+    return null;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+
+  const match = url.pathname.match(/\/repos\/([^/]+)\/([^/]+)\/issues\/([0-9]+)\/?$/u);
+  if (!match) {
+    return null;
+  }
+
+  const owner = match[1];
+  const repo = match[2];
+  const issueNumber = match[3];
+  if (!owner || !repo || !issueNumber) {
+    return null;
+  }
+
+  return {
+    repository: `${decodeURIComponent(owner)}/${decodeURIComponent(repo)}`,
+    issueNumber: Number(issueNumber),
+  };
+}
+
+export async function evaluateGuard(options: {
+  github: Pick<ReturnType<typeof createGitHubClient>, "getPullRequest" | "getIssueComment">;
+  repository: string;
+  prNumber: number;
+  triggerCommentId: number | null;
+}): Promise<{ shouldReview: boolean; reason: string }> {
+  let pr;
+  try {
+    pr = await options.github.getPullRequest(options.prNumber);
+  } catch {
+    return { shouldReview: false, reason: "pull request not found" };
+  }
+
+  if (pr.head?.repo?.full_name !== options.repository) {
+    return { shouldReview: false, reason: "fork pull requests are not reviewed" };
+  }
+
+  if (options.triggerCommentId) {
+    let comment;
+    try {
+      comment = await options.github.getIssueComment(options.triggerCommentId);
+    } catch {
+      return { shouldReview: false, reason: "trigger comment not found" };
+    }
+
+    const issue = parseIssueUrl(comment.issue_url);
+    if (issue?.repository !== options.repository || issue.issueNumber !== options.prNumber) {
+      return { shouldReview: false, reason: "trigger comment does not belong to this pull request" };
+    }
+
+    if (!trustedAssociation(comment.author_association)) {
+      return { shouldReview: false, reason: "trigger comment author is not trusted" };
+    }
+
+    if (comment.user?.type === "Bot") {
+      return { shouldReview: false, reason: "bot trigger comments are ignored" };
+    }
+
+    if (!String(comment.body || "").includes(REVIEW_COMMAND)) {
+      return { shouldReview: false, reason: `trigger comment does not mention ${REVIEW_COMMAND}` };
+    }
+  }
+
+  return { shouldReview: true, reason: "allowed" };
+}
+
+export async function main(_argv = process.argv.slice(2), env = process.env): Promise<void> {
+  const repository = required(env.GITHUB_REPOSITORY, "GITHUB_REPOSITORY");
+  const prNumber = Number(required(env.PR_NUMBER, "PR_NUMBER"));
+  const token = required(env.GH_TOKEN || env.GITHUB_TOKEN, "GH_TOKEN");
+  const triggerCommentId = env.TRIGGER_COMMENT_ID ? Number(env.TRIGGER_COMMENT_ID) : null;
+  const github = createGitHubClient({ token, repository });
+  const result = await evaluateGuard({ github, repository, prNumber, triggerCommentId });
+
+  if (result.shouldReview) {
+    allow(env);
+  } else {
+    deny(result.reason, env);
+  }
+}
+
+runCliMain(import.meta.url, "review_guard", () => main());
