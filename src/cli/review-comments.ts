@@ -82,7 +82,7 @@ function queueFileFromOptions(options: ParsedArgs, env: NodeJS.ProcessEnv): stri
 }
 
 function contextFileFromOptions(options: ParsedArgs, env: NodeJS.ProcessEnv): string {
-  return stringOption(options, "context") || env.REVIEW_CONTEXT_FILE || defaultFiles(env).contextFile;
+  return stringOption(options, "context") || env.REVIEW_VALIDATION_CONTEXT_FILE || defaultFiles(env).contextFile;
 }
 
 function readStdin(): Promise<string> {

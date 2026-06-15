@@ -71,6 +71,10 @@ dependencies. The runner then:
 8. posts a single GitHub review whose body uses the synthesized conclusion and
    any queued inline comments, plus any queued replies.
 
+The reusable workflow runs the review runner with two bounded attempts. Each
+attempt is capped at ten minutes so a transient OpenCode hang can be retried
+without leaving a PR review job stuck indefinitely.
+
 OpenCode invocations are routed through `src/clients/opencode.ts`, which keeps
 rendered output and raw JSON event streams as runtime artifacts when supported
 and reuses the same auditor OpenCode session for queue audit and final
@@ -150,13 +154,14 @@ repositories that accept arbitrary fork PRs, keep this workflow on the normal
 - `review_runner` runs the TypeScript review pipeline.
 - `review_extract` writes the post-run transcript, final comments JSON, and
   OpenCode telemetry stats used by GitHub summaries and eval capture.
-- `review_context` prints the compact reviewer context by default. The full
-  `review_context.json` artifact remains available for validation and local
+- `review_context` prints the compact review model context by default. The full
+  `review_validation_context.json` artifact remains available for validation and local
   troubleshooting with `review_context --full`.
-- `reviewer_context.json` is the compact context attached to the reviewer. It
+- `review_model_context.json` is the compact context attached to the reviewer. It
   strips raw GitHub REST payload fields and compresses commentable line arrays
-  into ranges so the model sees only review-relevant context.
-- `review_auditor_context.json` is a compact runtime artifact derived from the
+  into compact `"line"` and `"start-end"` ranges so the model sees only
+  review-relevant context.
+- `audit_model_context.json` is a compact runtime artifact derived from the
   full context for audit and synthesis prompts.
 - `review_comments` is the staging interface used by OpenCode and the
   runner for comments, suggestions, multiline findings, replies, listing, and
@@ -302,7 +307,7 @@ checks out the PR head, sets `DRY_RUN=true`, and puts a read-only `gh` wrapper i
 front of OpenCode investigation. The runner prints the final review payload to
 stdout and keeps artifacts under `/tmp/.singular-code-review/`, including
 `review_payload.json`, `review_validated.json`,
-`review_context.json`, `review_auditor_context.json`,
+`review_validation_context.json`, `review_model_context.json`, `audit_model_context.json`,
 `review_transcript.md`, `review_comments.json`, `review_stats.json`, `pr.diff`,
 and the OpenCode output logs.
 

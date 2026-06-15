@@ -7,9 +7,9 @@ import {
   REVIEW_BOT_LOGIN,
   REVIEW_COMMAND,
   type AuditorContext,
-  type CompactCommentRanges,
+  type CompactLineRanges,
   type IssueComment,
-  type LineRange,
+  type ModelCommentRanges,
   type ReviewActionItem,
   type ReviewComment,
   type ReviewContext,
@@ -310,31 +310,45 @@ function compactReviewThread(thread: ReviewThread): AuditorContext["unresolved_b
   };
 }
 
-function numberRanges(lines: number[] | undefined): LineRange[] {
+function numberRanges(lines: number[] | undefined): CompactLineRanges {
   const sorted = Array.from(new Set(lines || [])).sort((a, b) => a - b);
-  const ranges: LineRange[] = [];
+  const ranges: CompactLineRanges = [];
+  let start: number | null = null;
+  let end: number | null = null;
+
+  const pushCurrent = () => {
+    if (start === null || end === null) {
+      return;
+    }
+    ranges.push(start === end ? String(start) : `${start}-${end}`);
+  };
 
   for (const line of sorted) {
-    const last = ranges[ranges.length - 1];
-    if (last && line === last.end + 1) {
-      last.end = line;
+    if (start === null || end === null) {
+      start = line;
+      end = line;
+    } else if (line === end + 1) {
+      end = line;
     } else {
-      ranges.push({ start: line, end: line });
+      pushCurrent();
+      start = line;
+      end = line;
     }
   }
+  pushCurrent();
 
   return ranges;
 }
 
-function compactCommentRanges(ranges: ValidCommentRanges): CompactCommentRanges {
+function compactCommentRanges(ranges: ValidCommentRanges): ModelCommentRanges {
   return Object.fromEntries(
     Object.entries(ranges).map(([file, value]) => [
       file,
       {
-        added_lines: numberRanges(value.added_lines),
-        deleted_lines: numberRanges(value.deleted_lines),
-        right_lines: numberRanges(value.right_lines),
-        left_lines: numberRanges(value.left_lines),
+        added: numberRanges(value.added_lines),
+        deleted: numberRanges(value.deleted_lines),
+        right: numberRanges(value.right_lines),
+        left: numberRanges(value.left_lines),
       },
     ]),
   );
@@ -388,7 +402,7 @@ export function buildAuditorContext(context: ReviewContext): AuditorContext {
 
 /**
  * Builds the compact context attached to the reviewer model. Full REST payloads
- * and exact validation arrays stay in `review_context.json` for tools; the LLM
+ * and exact validation arrays stay in the validation context for tools; the LLM
  * gets only author-facing PR metadata, relevant discussion state, changed file
  * names, and compressed line ranges.
  */
@@ -398,8 +412,10 @@ export function buildReviewerContext(context: ReviewContext): ReviewerContext {
   return {
     ...auditorContext,
     diff: {
-      ...auditorContext.diff,
-      commentable_ranges: compactCommentRanges(context.valid_comment_ranges || {}),
+      file: auditorContext.diff.file,
+      files: auditorContext.diff.files,
+      ignored: auditorContext.diff.ignored_files,
+      ranges: compactCommentRanges(context.valid_comment_ranges || {}),
     },
     issue_comments: (context.issue_comments || []).map(compactIssueComment),
     recent_reviews: (context.reviews || []).map(compactReview),
@@ -407,7 +423,7 @@ export function buildReviewerContext(context: ReviewContext): ReviewerContext {
 }
 
 /**
- * Builds the full `review_context.json` artifact used by deterministic
+ * Builds the full validation context artifact used by deterministic
  * validation and local troubleshooting. The reviewer model receives the
  * serialized `buildReviewerContext` projection instead.
  */

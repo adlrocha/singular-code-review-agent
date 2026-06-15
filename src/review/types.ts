@@ -89,18 +89,15 @@ export type ValidCommentRanges = Record<
   }
 >;
 
-export type LineRange = {
-  start: number;
-  end: number;
-};
+export type CompactLineRanges = string[];
 
-export type CompactCommentRanges = Record<
+export type ModelCommentRanges = Record<
   string,
   {
-    added_lines: LineRange[];
-    deleted_lines: LineRange[];
-    right_lines: LineRange[];
-    left_lines: LineRange[];
+    added: CompactLineRanges;
+    deleted: CompactLineRanges;
+    right: CompactLineRanges;
+    left: CompactLineRanges;
   }
 >;
 
@@ -276,8 +273,11 @@ export type AuditorContext = {
 };
 
 export type ReviewerContext = Omit<AuditorContext, "diff"> & {
-  diff: AuditorContext["diff"] & {
-    commentable_ranges: CompactCommentRanges;
+  diff: {
+    file: string;
+    files: string[];
+    ignored: string[];
+    ranges: ModelCommentRanges;
   };
   issue_comments: Array<{
     id: number;

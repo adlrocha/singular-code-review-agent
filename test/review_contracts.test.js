@@ -159,7 +159,7 @@ test("review_comments rejects invalid targets before mutating the queue", async 
       ["add", "--path", "src/app.js", "--line", "1", "--body", "Do not comment on unchanged context."],
       {
         ...process.env,
-        REVIEW_CONTEXT_FILE: contextFile,
+        REVIEW_VALIDATION_CONTEXT_FILE: contextFile,
         REVIEW_QUEUE_FILE: queueFile,
       },
     ),
@@ -171,7 +171,7 @@ test("review_comments rejects invalid targets before mutating the queue", async 
     ["add", "--path", "src/app.js", "--line", "3", "--side", "LEFT", "--body", "Deleted branch needs explanation."],
     {
       ...process.env,
-      REVIEW_CONTEXT_FILE: contextFile,
+      REVIEW_VALIDATION_CONTEXT_FILE: contextFile,
       REVIEW_QUEUE_FILE: queueFile,
     },
   );

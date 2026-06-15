@@ -156,25 +156,23 @@ test("runner executes review, audit, synthesis, validation, and submission in or
   assert.equal(calls[1].agent, "auditor");
   assert.equal(calls[2].agent, "auditor");
   assert.match(calls[0].files[0], /^\/tmp\/\.singular-code-review\/runner-pipeline-/u);
-  assert.match(calls[0].files[0], /\/reviewer_context\.json$/u);
+  assert.match(calls[0].files[0], /\/review_model_context\.json$/u);
   assert.match(calls[0].files[1], /^\/tmp\/\.singular-code-review\/runner-pipeline-/u);
   assert.match(calls[0].files[1], /\/pr\.diff$/u);
-  assert.match(calls[0].prompt, /\/tmp\/\.singular-code-review\/runner-pipeline-.+\/reviewer_context\.json/u);
+  assert.match(calls[0].prompt, /\/tmp\/\.singular-code-review\/runner-pipeline-.+\/review_model_context\.json/u);
   assert.match(calls[0].prompt, /\/tmp\/\.singular-code-review\/runner-pipeline-.+\/pr\.diff/u);
-  assert.match(calls[1].files[2], /\/review_auditor_context\.json$/u);
-  assert.match(calls[2].files[2], /\/review_auditor_context\.json$/u);
-  assert.doesNotMatch(calls[1].prompt, /review_context\.json/u);
-  assert.match(calls[1].prompt, /review_auditor_context\.json/u);
-  assert.match(calls[2].prompt, /review_auditor_context\.json/u);
+  assert.match(calls[1].files[2], /\/audit_model_context\.json$/u);
+  assert.match(calls[2].files[2], /\/audit_model_context\.json$/u);
+  assert.doesNotMatch(calls[1].prompt, /review_validation_context\.json/u);
+  assert.match(calls[1].prompt, /audit_model_context\.json/u);
+  assert.match(calls[2].prompt, /audit_model_context\.json/u);
   const reviewerContext = JSON.parse(fs.readFileSync(config.artifacts.reviewerContextFile, "utf8"));
   assert.equal(reviewerContext.pr.title, "Test PR");
   assert.equal(reviewerContext.pr.head_repository, "owner/repo");
   assert.equal(Object.hasOwn(reviewerContext.pr, "forks_url"), false);
-  assert.deepEqual(reviewerContext.diff.commentable_ranges["src/app.js"].added_lines, [
-    { start: 2, end: 2 },
-    { start: 4, end: 4 },
-    { start: 6, end: 6 },
-  ]);
+  assert.deepEqual(reviewerContext.diff.ranges["src/app.js"].added, ["2", "4", "6"]);
+  assert.deepEqual(reviewerContext.diff.ranges["src/new.js"].added, ["1-2"]);
+  assert.equal(Object.hasOwn(reviewerContext.diff, "ignored_files"), false);
   const auditorContext = JSON.parse(fs.readFileSync(config.artifacts.auditorContextFile, "utf8"));
   assert.deepEqual(auditorContext.diff.files, ["src/app.js", "src/new.js"]);
   assert.equal(Object.hasOwn(auditorContext, "valid_comment_ranges"), false);

@@ -106,8 +106,9 @@ function createReviewWorkflowState(deps: ReviewWorkflowDependencies): ReviewWork
  */
 function exposeReviewArtifactsToTools(config: RunnerConfig, paths: ArtifactPaths): void {
   process.env.REVIEW_QUEUE_FILE = paths.queueFile;
-  process.env.REVIEW_CONTEXT_FILE = paths.contextFile;
-  process.env.REVIEWER_CONTEXT_FILE = paths.reviewerContextFile;
+  process.env.REVIEW_VALIDATION_CONTEXT_FILE = paths.contextFile;
+  process.env.REVIEW_MODEL_CONTEXT_FILE = paths.reviewerContextFile;
+  process.env.AUDIT_MODEL_CONTEXT_FILE = paths.auditorContextFile;
   process.env.REVIEW_DIFF_FILE = paths.diffFile;
   process.env.OPENCODE_MODEL = config.model;
 }

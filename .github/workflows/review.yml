@@ -99,8 +99,20 @@ jobs:
 
       - name: Run Singular Code Review
         if: steps.review-request.outputs.should_review == 'true'
-        timeout-minutes: 10
-        run: /usr/local/bin/review_runner
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2; do
+            echo "review_runner attempt ${attempt}/2"
+            if timeout 6m /usr/local/bin/review_runner; then
+              exit 0
+            fi
+
+            status=$?
+            echo "::warning::review_runner attempt ${attempt}/2 failed with status ${status}"
+            if [ "$attempt" -eq 2 ]; then
+              exit "$status"
+            fi
+          done
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}

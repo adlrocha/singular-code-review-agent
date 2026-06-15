@@ -84,7 +84,9 @@ test("reusable workflow runs guard, ack, provisioning, and the new runner", () =
   assert.match(workflow, /name: Provision review workspace/);
   assert.match(workflow, /\/usr\/local\/bin\/provision\.sh/);
   assert.match(workflow, /SINGULAR_CODE_REVIEW_INSTALL_DEPS: \$\{\{ inputs\.npm_install \}\}/);
-  assert.match(workflow, /name: Run Singular Code Review\s+if: steps\.review-request\.outputs\.should_review == 'true'\s+timeout-minutes: 10\s+run: \/usr\/local\/bin\/review_runner/);
+  assert.match(workflow, /name: Run Singular Code Review\s+if: steps\.review-request\.outputs\.should_review == 'true'\s+timeout-minutes: 22\s+run: \|\s+for attempt in 1 2; do/);
+  assert.match(workflow, /timeout 10m \/usr\/local\/bin\/review_runner/);
+  assert.match(workflow, /review_runner attempt \$\{attempt\}\/2/);
   assert.match(workflow, /\/usr\/local\/bin\/review_runner/);
   assert.match(workflow, /Extract review outputs and telemetry/);
   assert.match(workflow, /\/usr\/local\/bin\/review_extract --github-summary/);

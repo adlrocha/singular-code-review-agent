@@ -91,13 +91,13 @@ test("audit and synthesis prompts stay phase-specific because auditor owns post-
     workspace: "/repo",
     queueFile: "/tmp/.singular-code-review/run/review_queue.json",
     validatedFile: "/tmp/.singular-code-review/run/review_validated.json",
-    auditorContextFile: "/tmp/.singular-code-review/run/review_auditor_context.json",
+    auditorContextFile: "/tmp/.singular-code-review/run/audit_model_context.json",
     reviewerOutputFile: "/tmp/.singular-code-review/run/opencode_review.log",
   });
   const synthesisPrompt = buildSynthesisPrompt({
     reviewerOutputFile: "opencode_review.log",
     validatedFile: "review_validated.json",
-    auditorContextFile: "review_auditor_context.json",
+    auditorContextFile: "audit_model_context.json",
   });
 
   assert.doesNotMatch(auditPrompt, /^You are running a Singular Code Review post-processing phase\./u);
