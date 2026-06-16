@@ -3,29 +3,40 @@
   "version": "0.2.0",
   "private": true,
   "description": "Production runner for Singular Code Review GitHub App reviews.",
+  "bin": {
+    "review_ack": "dist/cli/review-ack.js",
+    "review_comments": "dist/cli/review-comments.js",
+    "review_context": "dist/cli/review-context.js",
+    "review_dry_run": "bin/review_dry_run",
+    "review_extract": "dist/cli/review-extract.js",
+    "review_guard": "dist/cli/review-guard.js",
+    "review_runner": "dist/cli/review-runner.js"
+  },
   "type": "module",
   "scripts": {
     "build": "bash scripts/build.sh",
     "test": "npm run build && node --test test/*.test.js",
-    "eval": "node eval/run.mjs"
-  },
-  "bin": {
-    "review_runner": "dist/cli/review-runner.js",
-    "review_extract": "dist/cli/review-extract.js",
-    "review_comments": "dist/cli/review-comments.js",
-    "review_context": "dist/cli/review-context.js",
-    "review_guard": "dist/cli/review-guard.js",
-    "review_ack": "dist/cli/review-ack.js",
-    "review_dry_run": "bin/review_dry_run"
-  },
-  "engines": {
-    "node": ">=20"
+    "eval": "node eval/run.mjs",
+    "lint": "tsc --noEmit && oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "prepare": "husky"
   },
   "dependencies": {
     "@octokit/rest": "^22.0.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^20.0.0",
     "@types/node": "^24.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "oxfmt": "^0.32.0",
+    "oxlint": "^1.47.0",
     "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

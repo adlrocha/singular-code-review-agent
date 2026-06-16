@@ -1,63 +1,63 @@
 #!/usr/bin/env node
-import { createGitHubClient } from "../clients/github.js";
-import { buildArtifactPaths, resolveWorkspace } from "../config/paths.js";
-import { runCliMain } from "../lib/cli-main.js";
-import { readJsonFile, writeJsonFile } from "../lib/json.js";
-import { buildReviewerContext, buildReviewContext, createEmptyReviewContext } from "../review/context.js";
-import { type ReviewContext, type ReviewerContext } from "../review/types.js";
+import { createGitHubClient } from "../clients/github.js"
+import { buildArtifactPaths, resolveWorkspace } from "../config/paths.js"
+import { runCliMain } from "../lib/cli-main.js"
+import { readJsonFile, writeJsonFile } from "../lib/json.js"
+import { buildReviewerContext, buildReviewContext, createEmptyReviewContext } from "../review/context.js"
+import { type ReviewContext, type ReviewerContext } from "../review/types.js"
 
-type ParsedArgs = Record<string, string | boolean | undefined>;
+type ParsedArgs = Record<string, string | boolean | undefined>
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const result: ParsedArgs = {};
+  const result: ParsedArgs = {}
 
   for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index] as string;
+    const arg = argv[index] as string
     if (!arg.startsWith("--")) {
-      continue;
+      continue
     }
 
-    const key = arg.slice(2).replace(/-/gu, "_");
-    const next = argv[index + 1];
+    const key = arg.slice(2).replace(/-/gu, "_")
+    const next = argv[index + 1]
     if (!next || next.startsWith("--")) {
-      result[key] = true;
+      result[key] = true
     } else {
-      result[key] = next;
-      index += 1;
+      result[key] = next
+      index += 1
     }
   }
 
-  return result;
+  return result
 }
 
 function required(value: string | undefined, name: string): string {
   if (!value) {
-    throw new Error(`${name} is required`);
+    throw new Error(`${name} is required`)
   }
-  return value;
+  return value
 }
 
 function printJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env): Promise<void> {
-  const options = parseArgs(argv);
-  const workspace = resolveWorkspace(env);
-  const defaults = buildArtifactPaths(env, workspace);
+  const options = parseArgs(argv)
+  const workspace = resolveWorkspace(env)
+  const defaults = buildArtifactPaths(env, workspace)
   const output =
     typeof options.output === "string"
       ? options.output
       : options.full
         ? defaults.contextFile
-        : defaults.reviewerContextFile;
+        : defaults.reviewerContextFile
 
   if (options.refresh) {
-    const repository = required((options.repo as string | undefined) || env.GITHUB_REPOSITORY, "GITHUB_REPOSITORY");
-    const prNumber = Number(required((options.pr as string | undefined) || env.PR_NUMBER, "PR_NUMBER"));
-    const token = required(env.GH_TOKEN || env.GITHUB_TOKEN, "GH_TOKEN");
-    const diffFile = typeof options.diff_file === "string" ? options.diff_file : defaults.diffFile;
-    const github = createGitHubClient({ token, repository });
+    const repository = required((options.repo as string | undefined) || env.GITHUB_REPOSITORY, "GITHUB_REPOSITORY")
+    const prNumber = Number(required((options.pr as string | undefined) || env.PR_NUMBER, "PR_NUMBER"))
+    const token = required(env.GH_TOKEN || env.GITHUB_TOKEN, "GH_TOKEN")
+    const diffFile = typeof options.diff_file === "string" ? options.diff_file : defaults.diffFile
+    const github = createGitHubClient({ token, repository })
     const context = await buildReviewContext({
       github,
       repository,
@@ -66,21 +66,23 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
       eventName: env.GITHUB_EVENT_NAME || null,
       eventPath: env.GITHUB_EVENT_PATH || null,
       actor: env.GITHUB_ACTOR || null,
-      botLogin: env.BOT_LOGIN,
-    });
-    writeJsonFile(defaults.contextFile, context);
-    writeJsonFile(defaults.reviewerContextFile, buildReviewerContext(context));
-    const rendered = options.full ? context : buildReviewerContext(context);
+      botLogin: env.BOT_LOGIN
+    })
+    writeJsonFile(defaults.contextFile, context)
+    writeJsonFile(defaults.reviewerContextFile, buildReviewerContext(context))
+    const rendered = options.full ? context : buildReviewerContext(context)
     if (typeof options.output === "string") {
-      writeJsonFile(output, rendered);
+      writeJsonFile(output, rendered)
     }
-    printJson(rendered);
-    return;
+    printJson(rendered)
+    return
   }
 
-  printJson(options.full
-    ? readJsonFile<ReviewContext>(output, createEmptyReviewContext())
-    : readJsonFile<ReviewerContext>(output, buildReviewerContext(createEmptyReviewContext())));
+  printJson(
+    options.full
+      ? readJsonFile<ReviewContext>(output, createEmptyReviewContext())
+      : readJsonFile<ReviewerContext>(output, buildReviewerContext(createEmptyReviewContext()))
+  )
 }
 
-runCliMain(import.meta.url, "review_context", () => main());
+runCliMain(import.meta.url, "review_context", () => main())

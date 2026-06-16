@@ -10,7 +10,6 @@ The project is designed to be operated centrally: this repository builds and
 publishes the reviewer image and exposes a reusable workflow, while consuming
 repositories opt in with a small trigger workflow and runtime secrets.
 
-
 ## Distribution model
 
 This is open-source infrastructure for Singular's own repositories, not a
@@ -289,8 +288,8 @@ The image vendors these skills from `we-are-singular/skills` at commit
 - `frontend-architecture`
 - `singular-code-review`
 
-Vendoring keeps image builds reproducible and avoids pulling skill content with 
-`npx` or GitHub during the Docker build. Update the snapshot by replacing the skill 
+Vendoring keeps image builds reproducible and avoids pulling skill content with
+`npx` or GitHub during the Docker build. Update the snapshot by replacing the skill
 directories under `opencode/skills/` and updating `opencode/skills/VENDORED_SKILLS.md`.
 
 ## Local development
@@ -301,6 +300,15 @@ runner with mocked external clients:
 ```bash
 npm test
 ```
+
+Lint and format checks use Oxlint and Oxfmt:
+
+```bash
+npm run lint
+npm run format:check
+```
+
+Use `npm run format` to apply formatting.
 
 For local image validation, build the container with:
 

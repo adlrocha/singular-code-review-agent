@@ -270,9 +270,7 @@ const config = loadRunnerConfig(process.env, process.argv)
 const logger = createLogger()
 const artifacts = new ArtifactStore(config.artifacts)
 const liveGitHub = createGitHubClient({ token: config.githubToken, repository: config.repository })
-const github = config.dryRun
-  ? createDryRunGitHubClient(liveGitHub, artifacts)
-  : liveGitHub
+const github = config.dryRun ? createDryRunGitHubClient(liveGitHub, artifacts) : liveGitHub
 const opencode = createCliOpenCodeClient({ logger })
 
 await runReviewWorkflow({ config, artifacts, github, opencode, logger })

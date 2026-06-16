@@ -10,7 +10,7 @@ import {
   type ReviewReplyInput,
   type ReviewSide,
   type ReviewThread,
-  type ValidatedReviewQueue,
+  type ValidatedReviewQueue
 } from "./types.js"
 
 /**
@@ -23,7 +23,7 @@ export function createEmptyQueue(): ReviewQueue {
     replies: [],
     conclusion: null,
     dropped: [],
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 }
 
@@ -35,7 +35,7 @@ export function loadQueue(file: string): ReviewQueue {
     // tolerant read path lets old dry-run artifacts remain inspectable.
     return {
       ...createEmptyQueue(),
-      inlineComments: value as ReviewInlineCommentInput[],
+      inlineComments: value as ReviewInlineCommentInput[]
     }
   }
 
@@ -46,14 +46,14 @@ export function loadQueue(file: string): ReviewQueue {
     inlineComments: Array.isArray(partial.inlineComments) ? partial.inlineComments : [],
     replies: Array.isArray(partial.replies) ? partial.replies : [],
     conclusion: typeof partial.conclusion === "string" ? partial.conclusion : null,
-    dropped: Array.isArray(partial.dropped) ? partial.dropped : [],
+    dropped: Array.isArray(partial.dropped) ? partial.dropped : []
   }
 }
 
 export function saveQueue(file: string, queue: ReviewQueue): void {
   writeJsonFile(file, {
     ...queue,
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   })
 }
 
@@ -114,7 +114,7 @@ export function normalizeInlineComment(input: ReviewInlineCommentInput): ReviewI
     path: input.path,
     line,
     side,
-    body,
+    body
   }
 
   if (startLine !== undefined && (startLine !== line || startSide !== side)) {
@@ -139,7 +139,7 @@ export function addInlineComment(file: string, input: ReviewInlineCommentInput):
  */
 export function addSuggestion(
   file: string,
-  input: Omit<ReviewInlineCommentInput, "body"> & { message: string; replacement: string },
+  input: Omit<ReviewInlineCommentInput, "body"> & { message: string; replacement: string }
 ): ReviewInlineComment {
   const message = String(input.message || "").trim()
   const replacement = String(input.replacement || "").replace(/\s+$/u, "")
@@ -159,7 +159,7 @@ export function addSuggestion(
   return addInlineComment(file, {
     ...input,
     kind: "suggestion",
-    body: `${message}\n\n\`\`\`suggestion\n${replacement}\n\`\`\``,
+    body: `${message}\n\n\`\`\`suggestion\n${replacement}\n\`\`\``
   })
 }
 
@@ -224,7 +224,7 @@ function commentKey(comment: ReviewInlineComment): string {
     comment.line,
     comment.side,
     comment.start_side || "",
-    comment.body,
+    comment.body
   ].join("\0")
 }
 
@@ -256,7 +256,7 @@ function commentFromThread(thread: ReviewThread): ReviewInlineComment | null {
     path: pathValue,
     line: Number(lineValue),
     side: normalizeSide(thread.side || topLevel?.side, "side"),
-    body: topLevel?.body || "",
+    body: topLevel?.body || ""
   }
 
   const startLine = thread.start_line || topLevel?.start_line
@@ -277,7 +277,7 @@ function existingBotFindingMatches(context: ReviewContext) {
   const botLogin = context.run?.bot_login
   const matches = {
     unresolvedBodyKeys: new Set<string>(),
-    restBodyKeys: new Set<string>(),
+    restBodyKeys: new Set<string>()
   }
 
   if (!botLogin) {
@@ -309,7 +309,7 @@ function existingBotFindingMatches(context: ReviewContext) {
       path: comment.path || "",
       line: Number(comment.line),
       side: normalizeSide(comment.side, "side"),
-      body: comment.body || "",
+      body: comment.body || ""
     }
     const startLine = comment.start_line || comment.startLine
     const startSide = normalizeSide(comment.start_side || comment.startSide || comparable.side, "start-side")
@@ -350,7 +350,7 @@ export function validateInlineComment(comment: ReviewInlineCommentInput, context
         if (!hasEveryLine(rangeLines, normalized.start_line, normalized.line)) {
           return {
             ok: false as const,
-            reason: `multi-line range is not fully present on the ${normalized.side} side of the diff`,
+            reason: `multi-line range is not fully present on the ${normalized.side} side of the diff`
           }
         }
       } else {
@@ -376,7 +376,7 @@ export function validateReply(reply: ReviewReplyInput, context: ReviewContext) {
   try {
     const normalized = normalizeReply(reply)
     const comments = Array.isArray(context.review_comments) ? context.review_comments : []
-    const target = comments.find((comment) => Number(comment.id) === normalized.to)
+    const target = comments.find(comment => Number(comment.id) === normalized.to)
     if (!target) {
       return { ok: false as const, reason: "reply target is not a review comment on this PR" }
     }
@@ -463,9 +463,9 @@ export function validateQueue(queue: ReviewQueue, context: ReviewContext): Valid
       has_conclusion: Boolean(queue.conclusion),
       valid_inline: inlineComments.length,
       valid_replies: replies.length,
-      dropped: dropped.length,
+      dropped: dropped.length
     },
-    conclusion: typeof queue.conclusion === "string" && queue.conclusion.trim() ? queue.conclusion.trim() : null,
+    conclusion: typeof queue.conclusion === "string" && queue.conclusion.trim() ? queue.conclusion.trim() : null
   }
 }
 

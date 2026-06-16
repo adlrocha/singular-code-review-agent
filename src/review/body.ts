@@ -2,17 +2,17 @@ import {
   type ReviewInlineComment,
   type ReviewPayload,
   type ReviewPayloadComment,
-  type ValidatedReviewQueue,
-} from "./types.js";
+  type ValidatedReviewQueue
+} from "./types.js"
 
-const MAX_REVIEW_BODY_LENGTH = 6_000;
+const MAX_REVIEW_BODY_LENGTH = 6_000
 
 /**
  * Converts provider-qualified model ids into the compact label shown in the
  * programmatic review banner.
  */
 export function modelLabel(modelId: string): string {
-  return modelId.split("/").filter(Boolean).pop() || modelId || "unknown";
+  return modelId.split("/").filter(Boolean).pop() || modelId || "unknown"
 }
 
 /**
@@ -21,9 +21,9 @@ export function modelLabel(modelId: string): string {
  * banner, because the synthesis prompt owns that output contract.
  */
 export function applyReviewBanner(body: string, modelId: string): string {
-  const trimmed = body.trim();
-  const banner = `> reviewer · ${modelLabel(modelId)}`;
-  return trimmed ? `${banner}\n\n${trimmed}` : banner;
+  const trimmed = body.trim()
+  const banner = `> reviewer · ${modelLabel(modelId)}`
+  return trimmed ? `${banner}\n\n${trimmed}` : banner
 }
 
 /**
@@ -32,10 +32,10 @@ export function applyReviewBanner(body: string, modelId: string): string {
  */
 export function enforceReviewBodyLimit(body: string, maxLength = MAX_REVIEW_BODY_LENGTH): string {
   if (body.length <= maxLength) {
-    return body;
+    return body
   }
 
-  return `${body.slice(0, maxLength).trimEnd()}\n\n[Review body truncated]`;
+  return `${body.slice(0, maxLength).trimEnd()}\n\n[Review body truncated]`
 }
 
 /**
@@ -46,15 +46,15 @@ export function toReviewPayloadComment(comment: ReviewInlineComment): ReviewPayl
     path: comment.path,
     line: comment.line,
     side: comment.side,
-    body: comment.body,
-  };
-
-  if (comment.start_line !== undefined) {
-    payload.start_line = comment.start_line;
-    payload.start_side = comment.start_side || comment.side;
+    body: comment.body
   }
 
-  return payload;
+  if (comment.start_line !== undefined) {
+    payload.start_line = comment.start_line
+    payload.start_side = comment.start_side || comment.side
+  }
+
+  return payload
 }
 
 /**
@@ -65,6 +65,6 @@ export function buildReviewPayload(validated: ValidatedReviewQueue): ReviewPaylo
   return {
     body: validated.conclusion?.trim() || "Singular Code Review completed.",
     event: "COMMENT",
-    comments: validated.inlineComments.map(toReviewPayloadComment),
-  };
+    comments: validated.inlineComments.map(toReviewPayloadComment)
+  }
 }

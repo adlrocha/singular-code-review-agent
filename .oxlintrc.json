@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "oxc", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "off",
+    "style": "off",
+    "pedantic": "off"
+  },
+  "env": {
+    "es2024": true,
+    "node": true
+  },
+  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**", "eval/**"],
+  "rules": {
+    "eslint/no-unused-vars": "error",
+    "typescript/no-unused-vars": "error",
+    "eslint/no-undef": "error",
+    "eslint/no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
+    "import/no-nodejs-modules": "off",
+    "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
+    "eslint/no-var": "error",
+    "eslint/prefer-const": "error",
+    "eslint/eqeqeq": "error",
+    "eslint/no-debugger": "error",
+    "eslint/no-console": "off",
+    "eslint/sort-imports": "off",
+    "eslint/sort-keys": "off",
+    "typescript/consistent-type-imports": "error",
+    "typescript/consistent-type-exports": "error",
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-non-null-assertion": "warn",
+    "typescript/no-floating-promises": "off"
+  },
+  "overrides": [
+    {
+      "files": ["test/**/*.js", "*.config.js"],
+      "rules": {
+        "typescript/consistent-type-imports": "off",
+        "typescript/consistent-type-exports": "off"
+      }
+    }
+  ]
+}

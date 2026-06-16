@@ -1,12 +1,12 @@
-import { realpathSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { getErrorMessage } from "./errors.js";
+import { realpathSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { getErrorMessage } from "./errors.js"
 
 function realPath(value: string): string {
   try {
-    return realpathSync(value);
+    return realpathSync(value)
   } catch {
-    return value;
+    return value
   }
 }
 
@@ -15,12 +15,12 @@ function realPath(value: string): string {
  * the container PATH.
  */
 export function isMainModule(metaUrl: string, argv = process.argv): boolean {
-  const entrypoint = argv[1];
+  const entrypoint = argv[1]
   if (!entrypoint) {
-    return false;
+    return false
   }
 
-  return realPath(fileURLToPath(metaUrl)) === realPath(entrypoint);
+  return realPath(fileURLToPath(metaUrl)) === realPath(entrypoint)
 }
 
 /**
@@ -29,11 +29,11 @@ export function isMainModule(metaUrl: string, argv = process.argv): boolean {
  */
 export function runCliMain(metaUrl: string, name: string, main: () => Promise<void>): void {
   if (!isMainModule(metaUrl)) {
-    return;
+    return
   }
 
-  main().catch((error) => {
-    process.stderr.write(`${name}: ${getErrorMessage(error)}\n`);
-    process.exit(1);
-  });
+  main().catch(error => {
+    process.stderr.write(`${name}: ${getErrorMessage(error)}\n`)
+    process.exit(1)
+  })
 }

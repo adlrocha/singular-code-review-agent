@@ -12,15 +12,15 @@ Output contract:
 - Use exactly one of these shapes:
 
 ```json
-{"decision":"review","reason":"<short internal reason>"}
+{ "decision": "review", "reason": "<short internal reason>" }
 ```
 
 ```json
-{"decision":"no-review","answer":"<short PR comment explaining why a full re-review is not needed>"}
+{ "decision": "no-review", "answer": "<short PR comment explaining why a full re-review is not needed>" }
 ```
 
 ```json
-{"decision":"answer","answer":"<direct answer to the user>"}
+{ "decision": "answer", "answer": "<direct answer to the user>" }
 ```
 
 Decision rules:
@@ -36,13 +36,22 @@ Decision rules:
 Examples:
 
 ```json
-{"decision":"review","reason":"The new delta changes worker authentication logic and should receive a full review."}
+{
+  "decision": "review",
+  "reason": "The new delta changes worker authentication logic and should receive a full review."
+}
 ```
 
 ```json
-{"decision":"no-review","answer":"No full re-review needed: the latest push only updates documentation and does not change runtime behavior."}
+{
+  "decision": "no-review",
+  "answer": "No full re-review needed: the latest push only updates documentation and does not change runtime behavior."
+}
 ```
 
 ```json
-{"decision":"answer","answer":"Yes, the previous finding still applies because the new guard only handles null, not unsupported language codes."}
+{
+  "decision": "answer",
+  "answer": "Yes, the previous finding still applies because the new guard only handles null, not unsupported language codes."
+}
 ```

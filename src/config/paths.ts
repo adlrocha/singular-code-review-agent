@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
-import { type ArtifactPaths } from "../lib/artifacts.js";
+import { existsSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { tmpdir } from "node:os"
+import { basename, join, resolve } from "node:path"
+import { type ArtifactPaths } from "../lib/artifacts.js"
 
 /**
  * Resolves the repository workspace across local runs, GitHub Actions, and the
@@ -10,18 +10,18 @@ import { type ArtifactPaths } from "../lib/artifacts.js";
  */
 export function resolveWorkspace(env: NodeJS.ProcessEnv): string {
   if (env.WORKSPACE) {
-    return resolve(env.WORKSPACE);
+    return resolve(env.WORKSPACE)
   }
 
   if (env.GITHUB_WORKSPACE) {
-    return resolve(env.GITHUB_WORKSPACE);
+    return resolve(env.GITHUB_WORKSPACE)
   }
 
   if (existsSync("/github/workspace")) {
-    return "/github/workspace";
+    return "/github/workspace"
   }
 
-  return process.cwd();
+  return process.cwd()
 }
 
 /**
@@ -30,12 +30,15 @@ export function resolveWorkspace(env: NodeJS.ProcessEnv): string {
  */
 export function defaultRuntimeDir(workspace: string): string {
   if (!workspace) {
-    return join(tmpdir(), ".singular-code-review", "default");
+    return join(tmpdir(), ".singular-code-review", "default")
   }
 
-  const slug = basename(workspace).replace(/[^a-zA-Z0-9._-]+/gu, "-").slice(0, 64) || "workspace";
-  const digest = createHash("sha256").update(resolve(workspace)).digest("hex").slice(0, 12);
-  return join(tmpdir(), ".singular-code-review", `${slug}-${digest}`);
+  const slug =
+    basename(workspace)
+      .replace(/[^a-zA-Z0-9._-]+/gu, "-")
+      .slice(0, 64) || "workspace"
+  const digest = createHash("sha256").update(resolve(workspace)).digest("hex").slice(0, 12)
+  return join(tmpdir(), ".singular-code-review", `${slug}-${digest}`)
 }
 
 /**
@@ -43,7 +46,7 @@ export function defaultRuntimeDir(workspace: string): string {
  * dry-run diagnostics.
  */
 export function buildArtifactPaths(env: NodeJS.ProcessEnv, workspace: string, runtimeDir?: string): ArtifactPaths {
-  const resolvedRuntimeDir = runtimeDir || env.SINGULAR_CODE_REVIEW_RUNTIME_DIR || defaultRuntimeDir(workspace);
+  const resolvedRuntimeDir = runtimeDir || env.SINGULAR_CODE_REVIEW_RUNTIME_DIR || defaultRuntimeDir(workspace)
 
   return {
     runtimeDir: resolvedRuntimeDir,
@@ -67,6 +70,6 @@ export function buildArtifactPaths(env: NodeJS.ProcessEnv, workspace: string, ru
     opencodeCapabilitiesFile: join(resolvedRuntimeDir, "opencode_capabilities.json"),
     gateSessionFile: join(resolvedRuntimeDir, "opencode_gate_session.txt"),
     reviewSessionFile: join(resolvedRuntimeDir, "opencode_review_session.txt"),
-    auditorSessionFile: join(resolvedRuntimeDir, "opencode_auditor_session.txt"),
-  };
+    auditorSessionFile: join(resolvedRuntimeDir, "opencode_auditor_session.txt")
+  }
 }

@@ -1,86 +1,86 @@
-import { type ArtifactPaths } from "../lib/artifacts.js";
-import { REVIEW_BOT_LOGIN, REVIEW_COMMAND } from "../review/types.js";
-import { buildArtifactPaths, resolveWorkspace } from "./paths.js";
+import { type ArtifactPaths } from "../lib/artifacts.js"
+import { REVIEW_BOT_LOGIN, REVIEW_COMMAND } from "../review/types.js"
+import { buildArtifactPaths, resolveWorkspace } from "./paths.js"
 
 export type RunnerConfig = {
-  repository: string;
-  prNumber: number;
-  githubToken: string;
-  workspace: string;
-  dryRun: boolean;
-  model: string;
-  gateModel: string;
-  command: string;
-  botLogin: string;
-  artifacts: ArtifactPaths;
-  triggerCommentId: number | null;
-  eventName: string | null;
-  eventPath: string | null;
-  actor: string | null;
-};
+  repository: string
+  prNumber: number
+  githubToken: string
+  workspace: string
+  dryRun: boolean
+  model: string
+  gateModel: string
+  command: string
+  botLogin: string
+  artifacts: ArtifactPaths
+  triggerCommentId: number | null
+  eventName: string | null
+  eventPath: string | null
+  actor: string | null
+}
 
 type ParsedArgs = {
-  repo?: string;
-  pr?: string;
-  workspace?: string;
-  runtimeDir?: string;
-  dryRun?: boolean;
-};
+  repo?: string
+  pr?: string
+  workspace?: string
+  runtimeDir?: string
+  dryRun?: boolean
+}
 
 export function parseCliArgs(argv: string[]): ParsedArgs {
-  const result: ParsedArgs = {};
+  const result: ParsedArgs = {}
 
   for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
+    const arg = argv[index]
     if (arg === "--dry-run") {
-      result.dryRun = true;
-      continue;
+      result.dryRun = true
+      continue
     }
 
     if (arg === "--repo") {
-      result.repo = argv[++index];
-      continue;
+      result.repo = argv[++index]
+      continue
     }
 
     if (arg === "--pr") {
-      result.pr = argv[++index];
-      continue;
+      result.pr = argv[++index]
+      continue
     }
 
     if (arg === "--workspace") {
-      result.workspace = argv[++index];
-      continue;
+      result.workspace = argv[++index]
+      continue
     }
 
     if (arg === "--runtime-dir") {
-      result.runtimeDir = argv[++index];
-      continue;
+      result.runtimeDir = argv[++index]
+      continue
     }
   }
 
-  return result;
+  return result
 }
 
 function requiredString(value: string | undefined, name: string): string {
   if (!value) {
-    throw new Error(`${name} is required`);
+    throw new Error(`${name} is required`)
   }
-  return value;
+  return value
 }
 
 function parsePositiveInt(value: string | undefined, name: string): number {
-  const parsed = Number(value);
+  const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
+    throw new Error(`${name} must be a positive integer`)
   }
-  return parsed;
+  return parsed
 }
 
 function optionalPositiveInt(value: string | undefined): number | null {
   if (!value) {
-    return null;
+    return null
   }
-  return parsePositiveInt(value, "TRIGGER_COMMENT_ID");
+  return parsePositiveInt(value, "TRIGGER_COMMENT_ID")
 }
 
 /**
@@ -88,9 +88,9 @@ function optionalPositiveInt(value: string | undefined): number | null {
  * vars plus local dry-run overrides.
  */
 export function loadRunnerConfig(env: NodeJS.ProcessEnv, argv: string[] = []): RunnerConfig {
-  const args = parseCliArgs(argv);
-  const workspace = args.workspace || resolveWorkspace(env);
-  const artifacts = buildArtifactPaths(env, workspace, args.runtimeDir);
+  const args = parseCliArgs(argv)
+  const workspace = args.workspace || resolveWorkspace(env)
+  const artifacts = buildArtifactPaths(env, workspace, args.runtimeDir)
 
   return {
     repository: requiredString(args.repo || env.GITHUB_REPOSITORY, "GITHUB_REPOSITORY"),
@@ -106,6 +106,6 @@ export function loadRunnerConfig(env: NodeJS.ProcessEnv, argv: string[] = []): R
     triggerCommentId: optionalPositiveInt(env.TRIGGER_COMMENT_ID),
     eventName: env.GITHUB_EVENT_NAME || null,
     eventPath: env.GITHUB_EVENT_PATH || null,
-    actor: env.GITHUB_ACTOR || null,
-  };
+    actor: env.GITHUB_ACTOR || null
+  }
 }

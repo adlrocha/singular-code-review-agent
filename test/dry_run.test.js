@@ -1,96 +1,96 @@
-import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import test from "node:test";
-import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict"
+import { execFileSync, spawnSync } from "node:child_process"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import test from "node:test"
+import { fileURLToPath } from "node:url"
 
-import { createDryRunGitHubClient } from "../dist/clients/github.js";
-import { buildArtifactPaths } from "../dist/config/paths.js";
-import { ArtifactStore } from "../dist/lib/artifacts.js";
+import { createDryRunGitHubClient } from "../dist/clients/github.js"
+import { buildArtifactPaths } from "../dist/config/paths.js"
+import { ArtifactStore } from "../dist/lib/artifacts.js"
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const dryRun = path.join(repoRoot, "bin", "review_dry_run");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const dryRun = path.join(repoRoot, "bin", "review_dry_run")
 
 function makeExecutable(file, body) {
-  fs.writeFileSync(file, body, { mode: 0o755 });
+  fs.writeFileSync(file, body, { mode: 0o755 })
 }
 
 test("dry-run GitHub client writes payload and replies to artifacts instead of delegate writes", async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "dry-client-"));
-  fs.mkdirSync(path.join(workspace, ".git"));
-  const artifacts = new ArtifactStore(buildArtifactPaths({}, workspace));
-  const delegateWrites = [];
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "dry-client-"))
+  fs.mkdirSync(path.join(workspace, ".git"))
+  const artifacts = new ArtifactStore(buildArtifactPaths({}, workspace))
+  const delegateWrites = []
   const delegate = {
     async getPullRequest() {
-      return { number: 42 };
+      return { number: 42 }
     },
     async getPullRequestDiff() {
-      return "";
+      return ""
     },
     async getIssueComment() {
-      return { id: 1 };
+      return { id: 1 }
     },
     async listIssueComments() {
-      return [];
+      return []
     },
     async listReviewComments() {
-      return [];
+      return []
     },
     async listReviews() {
-      return [];
+      return []
     },
     async listReviewThreads() {
-      return { available: true, threads: [] };
+      return { available: true, threads: [] }
     },
     async listIssueCommentReactions() {
-      return [];
+      return []
     },
     async createIssueCommentReaction() {
-      delegateWrites.push("reaction");
+      delegateWrites.push("reaction")
     },
     async createIssueComment() {
-      delegateWrites.push("issue-comment");
+      delegateWrites.push("issue-comment")
     },
     async submitReview() {
-      delegateWrites.push("review");
+      delegateWrites.push("review")
     },
     async submitReply() {
-      delegateWrites.push("reply");
-    },
-  };
+      delegateWrites.push("reply")
+    }
+  }
 
-  const client = createDryRunGitHubClient(delegate, artifacts);
-  await client.submitReview(42, { body: "Dry run body", event: "COMMENT", comments: [] });
-  await client.submitReply(42, 123, "Dry run reply");
-  await client.createIssueCommentReaction(99, "eyes");
-  await client.createIssueComment(42, "Dry run issue comment");
+  const client = createDryRunGitHubClient(delegate, artifacts)
+  await client.submitReview(42, { body: "Dry run body", event: "COMMENT", comments: [] })
+  await client.submitReply(42, 123, "Dry run reply")
+  await client.createIssueCommentReaction(99, "eyes")
+  await client.createIssueComment(42, "Dry run issue comment")
 
-  assert.deepEqual(delegateWrites, []);
+  assert.deepEqual(delegateWrites, [])
   assert.deepEqual(JSON.parse(fs.readFileSync(artifacts.paths.payloadFile, "utf8")), {
     body: "Dry run body",
     event: "COMMENT",
-    comments: [],
-  });
+    comments: []
+  })
   assert.deepEqual(JSON.parse(fs.readFileSync(artifacts.child("dry-run-reply-123.json"), "utf8")), {
-    body: "Dry run reply",
-  });
+    body: "Dry run reply"
+  })
   assert.deepEqual(JSON.parse(fs.readFileSync(artifacts.child("dry-run-reaction-99.json"), "utf8")), {
-    content: "eyes",
-  });
+    content: "eyes"
+  })
   assert.deepEqual(JSON.parse(fs.readFileSync(artifacts.child("dry-run-issue-comment-42.json"), "utf8")), {
-    body: "Dry run issue comment",
-  });
-});
+    body: "Dry run issue comment"
+  })
+})
 
 test("review_dry_run runs provision and runner with read-only gh wrapper", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-dry-run-"));
-  const mockbin = path.join(dir, "mockbin");
-  const workspace = path.join(dir, "workspace");
-  const provisionEnvFile = path.join(dir, "provision-env.json");
-  const runnerEnvFile = path.join(dir, "runner-env.json");
-  fs.mkdirSync(mockbin);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-dry-run-"))
+  const mockbin = path.join(dir, "mockbin")
+  const workspace = path.join(dir, "workspace")
+  const provisionEnvFile = path.join(dir, "provision-env.json")
+  const runnerEnvFile = path.join(dir, "runner-env.json")
+  fs.mkdirSync(mockbin)
 
   makeExecutable(
     path.join(mockbin, "gh"),
@@ -109,18 +109,18 @@ if [[ "\${1:-}" == "repo" && "\${2:-}" == "clone" ]]; then
 fi
 printf 'mock gh should not receive: %s\\n' "$*" >&2
 exit 1
-`,
-  );
+`
+  )
 
   makeExecutable(
     path.join(mockbin, "git"),
     `#!/usr/bin/env bash
 set -euo pipefail
 exit 0
-`,
-  );
+`
+  )
 
-  const provision = path.join(dir, "provision");
+  const provision = path.join(dir, "provision")
   makeExecutable(
     provision,
     `#!/usr/bin/env bash
@@ -136,10 +136,10 @@ fs.writeFileSync(process.env.PROVISION_ENV_FILE, JSON.stringify({
   pathHead: process.env.PATH.split(":")[0]
 }, null, 2));
 '
-`,
-  );
+`
+  )
 
-  const runner = path.join(dir, "runner");
+  const runner = path.join(dir, "runner")
   makeExecutable(
     runner,
     `#!/usr/bin/env bash
@@ -161,8 +161,8 @@ fs.writeFileSync(process.env.RUNNER_ENV_FILE, JSON.stringify({
 if gh api -X POST repos/owner/repo/issues/1/comments -f body=test >/tmp/review-dry-run-gh.out 2>/tmp/review-dry-run-gh.err; then
   exit 2
 fi
-`,
-  );
+`
+  )
 
   execFileSync("bash", [dryRun, "owner/repo", "42", "--workspace", workspace], {
     cwd: repoRoot,
@@ -173,17 +173,17 @@ fi
       REVIEW_RUNNER: runner,
       PROVISION_ENV_FILE: provisionEnvFile,
       RUNNER_ENV_FILE: runnerEnvFile,
-      OPENCODE_API_KEY: "test-opencode-key",
+      OPENCODE_API_KEY: "test-opencode-key"
     },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+    stdio: ["ignore", "pipe", "pipe"]
+  })
 
-  const provisionEnv = JSON.parse(fs.readFileSync(provisionEnvFile, "utf8"));
-  const runnerEnv = JSON.parse(fs.readFileSync(runnerEnvFile, "utf8"));
-  assert.match(provisionEnv.pathHead, /^\/tmp\/\.singular-code-review\/owner-repo-pr-42-/u);
-  const wrapperDir = provisionEnv.pathHead;
-  const runtimeDir = path.dirname(wrapperDir);
-  const stats = JSON.parse(fs.readFileSync(path.join(runtimeDir, "review_stats.json"), "utf8"));
+  const provisionEnv = JSON.parse(fs.readFileSync(provisionEnvFile, "utf8"))
+  const runnerEnv = JSON.parse(fs.readFileSync(runnerEnvFile, "utf8"))
+  assert.match(provisionEnv.pathHead, /^\/tmp\/\.singular-code-review\/owner-repo-pr-42-/u)
+  const wrapperDir = provisionEnv.pathHead
+  const runtimeDir = path.dirname(wrapperDir)
+  const stats = JSON.parse(fs.readFileSync(path.join(runtimeDir, "review_stats.json"), "utf8"))
 
   assert.deepEqual(provisionEnv, {
     dryRun: "true",
@@ -191,32 +191,32 @@ fi
     workspace,
     home: path.join(runtimeDir, "home"),
     xdgConfigHome: path.join(runtimeDir, "xdg", "config"),
-    pathHead: wrapperDir,
-  });
-  assert.equal(runnerEnv.dryRun, "true");
-  assert.equal(runnerEnv.token, "mock-token");
-  assert.equal(runnerEnv.repo, "owner/repo");
-  assert.equal(runnerEnv.pr, "42");
-  assert.equal(runnerEnv.workspace, workspace);
-  assert.equal(runnerEnv.home, path.join(runtimeDir, "home"));
-  assert.equal(runnerEnv.xdgConfigHome, path.join(runtimeDir, "xdg", "config"));
-  assert.equal(runnerEnv.realGh, path.join(mockbin, "gh"));
-  assert.equal(runnerEnv.pathHead, wrapperDir);
-  assert.equal(fs.existsSync(path.join(runtimeDir, "review_transcript.md")), true);
-  assert.equal(fs.existsSync(path.join(runtimeDir, "review_comments.json")), true);
-  assert.equal(stats.repository, "owner/repo");
-  assert.equal(stats.prNumber, 42);
-  assert.equal(stats.model, "opencode-go/minimax-m2.7");
-});
+    pathHead: wrapperDir
+  })
+  assert.equal(runnerEnv.dryRun, "true")
+  assert.equal(runnerEnv.token, "mock-token")
+  assert.equal(runnerEnv.repo, "owner/repo")
+  assert.equal(runnerEnv.pr, "42")
+  assert.equal(runnerEnv.workspace, workspace)
+  assert.equal(runnerEnv.home, path.join(runtimeDir, "home"))
+  assert.equal(runnerEnv.xdgConfigHome, path.join(runtimeDir, "xdg", "config"))
+  assert.equal(runnerEnv.realGh, path.join(mockbin, "gh"))
+  assert.equal(runnerEnv.pathHead, wrapperDir)
+  assert.equal(fs.existsSync(path.join(runtimeDir, "review_transcript.md")), true)
+  assert.equal(fs.existsSync(path.join(runtimeDir, "review_comments.json")), true)
+  assert.equal(stats.repository, "owner/repo")
+  assert.equal(stats.prNumber, 42)
+  assert.equal(stats.model, "opencode-go/minimax-m2.7")
+})
 
 test("review_dry_run keeps explicit runtime dir artifacts and reports provision failure", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-dry-run-"));
-  const mockbin = path.join(dir, "mockbin");
-  const workspace = path.join(dir, "workspace");
-  const runtimeDir = path.join(dir, "runtime");
-  const outputDir = path.join(dir, "outputs");
-  const runnerMarker = path.join(dir, "runner-ran");
-  fs.mkdirSync(mockbin);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-dry-run-"))
+  const mockbin = path.join(dir, "mockbin")
+  const workspace = path.join(dir, "workspace")
+  const runtimeDir = path.join(dir, "runtime")
+  const outputDir = path.join(dir, "outputs")
+  const runnerMarker = path.join(dir, "runner-ran")
+  fs.mkdirSync(mockbin)
 
   makeExecutable(
     path.join(mockbin, "gh"),
@@ -234,34 +234,34 @@ if [[ "\${1:-}" == "repo" && "\${2:-}" == "clone" ]]; then
   exit 0
 fi
 exit 1
-`,
-  );
+`
+  )
 
   makeExecutable(
     path.join(mockbin, "git"),
     `#!/usr/bin/env bash
 set -euo pipefail
 exit 0
-`,
-  );
+`
+  )
 
-  const provision = path.join(dir, "provision");
+  const provision = path.join(dir, "provision")
   makeExecutable(
     provision,
     `#!/usr/bin/env bash
 set -euo pipefail
 exit 7
-`,
-  );
+`
+  )
 
-  const runner = path.join(dir, "runner");
+  const runner = path.join(dir, "runner")
   makeExecutable(
     runner,
     `#!/usr/bin/env bash
 set -euo pipefail
 touch "${runnerMarker}"
-`,
-  );
+`
+  )
 
   const result = spawnSync(
     "bash",
@@ -273,21 +273,21 @@ touch "${runnerMarker}"
         PATH: `${mockbin}:${process.env.PATH}`,
         REVIEW_PROVISION: provision,
         REVIEW_RUNNER: runner,
-        OPENCODE_API_KEY: "test-opencode-key",
+        OPENCODE_API_KEY: "test-opencode-key"
       },
-      encoding: "utf8",
-    },
-  );
+      encoding: "utf8"
+    }
+  )
 
-  assert.equal(result.status, 7);
-  assert.match(result.stderr, new RegExp(`dry-run runtime dir: ${runtimeDir.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`));
-  assert.match(result.stderr, /provision step failed with status 7; review runner was not started/u);
-  assert.match(result.stderr, /review payload: .+review_payload\.json \(missing\)/u);
-  assert.match(result.stderr, /review extraction finished/u);
-  assert.equal(fs.existsSync(path.join(runtimeDir, "dry-run-bin", "gh")), true);
-  assert.equal(fs.existsSync(path.join(runtimeDir, "review_transcript.md")), true);
-  assert.equal(fs.existsSync(path.join(outputDir, "review_transcript.md")), true);
-  assert.equal(fs.existsSync(path.join(outputDir, "review_comments.json")), true);
-  assert.equal(fs.existsSync(path.join(outputDir, "review_stats.json")), true);
-  assert.equal(fs.existsSync(runnerMarker), false);
-});
+  assert.equal(result.status, 7)
+  assert.match(result.stderr, new RegExp(`dry-run runtime dir: ${runtimeDir.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`))
+  assert.match(result.stderr, /provision step failed with status 7; review runner was not started/u)
+  assert.match(result.stderr, /review payload: .+review_payload\.json \(missing\)/u)
+  assert.match(result.stderr, /review extraction finished/u)
+  assert.equal(fs.existsSync(path.join(runtimeDir, "dry-run-bin", "gh")), true)
+  assert.equal(fs.existsSync(path.join(runtimeDir, "review_transcript.md")), true)
+  assert.equal(fs.existsSync(path.join(outputDir, "review_transcript.md")), true)
+  assert.equal(fs.existsSync(path.join(outputDir, "review_comments.json")), true)
+  assert.equal(fs.existsSync(path.join(outputDir, "review_stats.json")), true)
+  assert.equal(fs.existsSync(runnerMarker), false)
+})

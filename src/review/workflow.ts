@@ -70,7 +70,7 @@ function reviewerOutputSeemsComplete(reviewText: string): boolean {
   return (
     /\b(?:verdict|LGTM|looks good|ready to merge|request changes?|block:)\b/iu.test(reviewText) ||
     /\b(?:no|not any|did not find|didn't find)\s+(?:valid\s+|blocking\s+|actionable\s+)?(?:issues?|findings?|problems?|concerns?)\b/iu.test(
-      reviewText,
+      reviewText
     ) ||
     /\bnothing\s+(?:actionable|blocking|merge-blocking)\b/iu.test(reviewText)
   )
@@ -106,7 +106,7 @@ function buildOpenCodeReviewPaths(config: RunnerConfig, paths: ArtifactPaths): O
     diffPath: pathForOpenCode(config.workspace, paths.diffFile),
     queuePath: pathForOpenCode(config.workspace, paths.queueFile),
     validatedPath: pathForOpenCode(config.workspace, paths.validatedFile),
-    reviewOutputPath: pathForOpenCode(config.workspace, paths.reviewOutputFile),
+    reviewOutputPath: pathForOpenCode(config.workspace, paths.reviewOutputFile)
   }
 }
 
@@ -115,7 +115,7 @@ function createReviewWorkflowState(deps: ReviewWorkflowDependencies): ReviewWork
   return {
     ...deps,
     paths,
-    opencodePaths: buildOpenCodeReviewPaths(deps.config, paths),
+    opencodePaths: buildOpenCodeReviewPaths(deps.config, paths)
   }
 }
 
@@ -142,7 +142,7 @@ function logPhase(
   logger: Logger,
   phase: ReviewWorkflowPhase,
   message: string,
-  context?: Record<string, unknown>,
+  context?: Record<string, unknown>
 ): void {
   logger.info(`${phase}: ${message}`, context)
 }
@@ -156,7 +156,7 @@ async function runGatheringPhase(state: ReviewWorkflowState): Promise<ReviewCont
 
   logPhase(logger, "gathering", "building review context", {
     repository: config.repository,
-    pr: config.prNumber,
+    pr: config.prNumber
   })
 
   const context = await buildReviewContext({
@@ -167,7 +167,7 @@ async function runGatheringPhase(state: ReviewWorkflowState): Promise<ReviewCont
     eventName: config.eventName,
     eventPath: config.eventPath,
     actor: config.actor,
-    botLogin: config.botLogin,
+    botLogin: config.botLogin
   })
 
   artifacts.writeJson(paths.contextFile, context)
@@ -197,8 +197,8 @@ async function runReviewPhase(state: ReviewWorkflowState): Promise<OpenCodeRunRe
     files: [opencodePaths.reviewContextPath, opencodePaths.diffPath],
     prompt: buildReviewPrompt({
       contextFile: opencodePaths.reviewContextPath,
-      diffFile: opencodePaths.diffPath,
-    }),
+      diffFile: opencodePaths.diffPath
+    })
   })
 }
 
@@ -207,14 +207,14 @@ function gateContextForPrompt(context: GateContext, gateDeltaPath: string): Gate
     ...context,
     delta: {
       ...context.delta,
-      file: gateDeltaPath,
-    },
+      file: gateDeltaPath
+    }
   }
 }
 
 async function postGateAnswer(
   state: ReviewWorkflowState,
-  decision: Extract<GateDecision, { decision: "answer" | "no-review" }>,
+  decision: Extract<GateDecision, { decision: "answer" | "no-review" }>
 ): Promise<ReviewWorkflowResult> {
   await state.github.createIssueComment(state.config.prNumber, decision.answer)
   const status = decision.decision === "answer" ? "answered" : "no-review"
@@ -222,12 +222,12 @@ async function postGateAnswer(
     generated_at: new Date().toISOString(),
     decision: decision.decision,
     status,
-    answer: decision.answer,
+    answer: decision.answer
   })
   state.logger.info(`gate: posted ${status} comment`)
   return {
     status,
-    reason: decision.answer,
+    reason: decision.answer
   }
 }
 
@@ -238,14 +238,14 @@ async function postGateAnswer(
 async function runGatePhase(
   state: ReviewWorkflowState,
   context: ReviewContext,
-  diffText: string,
+  diffText: string
 ): Promise<ReviewWorkflowResult | null> {
   const { config, opencode, artifacts, paths, opencodePaths, logger } = state
   const prepared = prepareGate({
     context,
     workspace: config.workspace,
     diffText,
-    botLogin: config.botLogin,
+    botLogin: config.botLogin
   })
 
   if (prepared.action === "run-review") {
@@ -264,7 +264,7 @@ async function runGatePhase(
 
   logPhase(logger, "gate", "running OpenCode", {
     model: config.gateModel,
-    delta_mode: gateContext.delta.mode,
+    delta_mode: gateContext.delta.mode
   })
 
   let gateRun: OpenCodeRunResult
@@ -280,12 +280,12 @@ async function runGatePhase(
       files: [opencodePaths.gateContextPath, opencodePaths.gateDeltaPath],
       prompt: buildGatePrompt({
         contextFile: opencodePaths.gateContextPath,
-        deltaFile: opencodePaths.gateDeltaPath,
-      }),
+        deltaFile: opencodePaths.gateDeltaPath
+      })
     })
   } catch (error) {
     logger.warn("gate: OpenCode failed; running full review", {
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error)
     })
     return null
   }
@@ -295,7 +295,7 @@ async function runGatePhase(
     decision = parseGateDecision(gateRun.text)
   } catch (error) {
     logger.warn("gate: invalid output; running full review", {
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error)
     })
     return null
   }
@@ -317,7 +317,7 @@ function validateCurrentQueue(
   state: ReviewWorkflowState,
   context: ReviewContext,
   phase: ReviewWorkflowPhase,
-  message: string,
+  message: string
 ): ValidatedReviewQueue {
   const validated = validateQueue(loadQueue(state.paths.queueFile), context)
   state.artifacts.writeJson(state.paths.validatedFile, validated)
@@ -333,7 +333,7 @@ function validateCurrentQueue(
 async function runAuditPhase(
   state: ReviewWorkflowState,
   context: ReviewContext,
-  currentValidation: ValidatedReviewQueue,
+  currentValidation: ValidatedReviewQueue
 ): Promise<ValidatedReviewQueue> {
   const { config, opencode, paths, opencodePaths, logger } = state
 
@@ -356,15 +356,15 @@ async function runAuditPhase(
       opencodePaths.queuePath,
       opencodePaths.validatedPath,
       opencodePaths.auditorContextPath,
-      opencodePaths.reviewOutputPath,
+      opencodePaths.reviewOutputPath
     ],
     prompt: buildAuditPrompt({
       workspace: config.workspace,
       queueFile: opencodePaths.queuePath,
       validatedFile: opencodePaths.validatedPath,
       auditorContextFile: opencodePaths.auditorContextPath,
-      reviewerOutputFile: opencodePaths.reviewOutputPath,
-    }),
+      reviewerOutputFile: opencodePaths.reviewOutputPath
+    })
   })
 
   return validateCurrentQueue(state, context, "audit", "post-audit validation")
@@ -377,7 +377,7 @@ async function runAuditPhase(
 async function runSynthesisPhase(
   state: ReviewWorkflowState,
   context: ReviewContext,
-  reviewPass: OpenCodeRunResult,
+  reviewPass: OpenCodeRunResult
 ): Promise<string> {
   const { config, opencode, artifacts, paths, opencodePaths, logger } = state
   const reviewerOutputText = existsSync(paths.reviewOutputFile)
@@ -386,7 +386,7 @@ async function runSynthesisPhase(
   const reviewSeemsComplete = reviewerOutputSeemsComplete(reviewerOutputText)
   artifacts.writeJson(paths.auditorContextFile, {
     ...buildAuditorContext(context),
-    review_seems_complete: reviewSeemsComplete,
+    review_seems_complete: reviewSeemsComplete
   })
   if (!reviewSeemsComplete) {
     logger.warn("synthesis: reviewer output does not include terminal review language")
@@ -406,8 +406,8 @@ async function runSynthesisPhase(
     prompt: buildSynthesisPrompt({
       reviewerOutputFile: opencodePaths.reviewOutputPath,
       validatedFile: opencodePaths.validatedPath,
-      auditorContextFile: opencodePaths.auditorContextPath,
-    }),
+      auditorContextFile: opencodePaths.auditorContextPath
+    })
   })
 
   return synthesis.text.trim() || fallbackConclusion(reviewPass.text)
@@ -420,7 +420,7 @@ async function runSynthesisPhase(
 async function submitReviewResult(
   state: ReviewWorkflowState,
   context: ReviewContext,
-  synthesized: string,
+  synthesized: string
 ): Promise<ReviewWorkflowResult> {
   const { config, github, artifacts, paths, logger } = state
 
@@ -436,7 +436,7 @@ async function submitReviewResult(
   if (validated.inlineComments.length > 0 || validated.conclusion) {
     await github.submitReview(config.prNumber, payload)
     logger.info(config.dryRun ? "prepared dry-run review" : "submitted review", {
-      inlineComments: validated.inlineComments.length,
+      inlineComments: validated.inlineComments.length
     })
   }
 
@@ -445,7 +445,7 @@ async function submitReviewResult(
   }
   if (validated.replies.length > 0) {
     logger.info(config.dryRun ? "prepared dry-run replies" : "submitted review replies", {
-      replies: validated.replies.length,
+      replies: validated.replies.length
     })
   }
 
@@ -454,7 +454,7 @@ async function submitReviewResult(
     inlineComments: validated.inlineComments.length,
     replies: validated.replies.length,
     payloadFile: paths.payloadFile,
-    validatedFile: paths.validatedFile,
+    validatedFile: paths.validatedFile
   }
 }
 

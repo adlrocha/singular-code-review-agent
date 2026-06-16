@@ -91,7 +91,7 @@ export function ResourcePickerController(): React.JSX.Element {
   return (
     <ResourcePicker
       resources={data}
-      onCreate={(name) => create.mutateAsync({ name })}
+      onCreate={name => create.mutateAsync({ name })}
       renderEmpty={() => <EmptyState title="No resources yet" />}
     />
   )
@@ -100,7 +100,7 @@ export function ResourcePickerController(): React.JSX.Element {
 export function ResourcePicker({
   resources,
   onCreate,
-  renderEmpty,
+  renderEmpty
 }: {
   resources: ResourceSummary[]
   onCreate: (name: string) => Promise<void>
@@ -181,7 +181,7 @@ export const resourceDetailQueryKey = (id: string) => ["resources", "detail", id
 export const resourceListQueryOptions = queryOptions({
   queryKey: resourceListQueryKey,
   queryFn: fetchResources,
-  staleTime: 60_000,
+  staleTime: 60_000
 })
 
 export const resourceDetailQueryOptions = (id: string | undefined) =>
@@ -192,7 +192,7 @@ export const resourceDetailQueryOptions = (id: string | undefined) =>
       return fetchResource(id)
     },
     enabled: Boolean(id),
-    staleTime: 30_000,
+    staleTime: 30_000
   })
 ```
 
@@ -204,7 +204,7 @@ For action-style APIs, service objects can group cache keys, fetcher stores, mut
 export const resourceService = {
   keys: {
     list: () => ["resources"],
-    detail: (id: string | null) => ["resource", String(id)],
+    detail: (id: string | null) => ["resource", String(id)]
   },
   useList: () => useLiveQuery($resources, []),
   async update(id: string, payload: UpdateResourceInput) {
@@ -213,7 +213,7 @@ export const resourceService = {
     mutateCache(resourceService.keys.detail(id), data)
     revalidateKeys(resourceService.keys.list())
     return data
-  },
+  }
 }
 ```
 
@@ -234,12 +234,12 @@ Optimistic mutation shape:
 
 ```tsx
 const renameMutation = useMutation<Resource, Error, string, { previous?: ResourceList }>({
-  mutationFn: (name) => updateResourceName({ id, name }),
-  onMutate: async (name) => {
+  mutationFn: name => updateResourceName({ id, name }),
+  onMutate: async name => {
     await queryClient.cancelQueries({ queryKey: resourceListQueryKey })
     const previous = queryClient.getQueryData<ResourceList>(resourceListQueryKey)
-    queryClient.setQueryData<ResourceList>(resourceListQueryKey, (current) =>
-      current ? current.map((item) => (item.id === id ? { ...item, name } : item)) : current,
+    queryClient.setQueryData<ResourceList>(resourceListQueryKey, current =>
+      current ? current.map(item => (item.id === id ? { ...item, name } : item)) : current
     )
     return { previous }
   },
@@ -247,13 +247,13 @@ const renameMutation = useMutation<Resource, Error, string, { previous?: Resourc
     if (context?.previous) queryClient.setQueryData(resourceListQueryKey, context.previous)
     toast.error(error.message)
   },
-  onSuccess: (resource) => {
+  onSuccess: resource => {
     queryClient.setQueryData(resourceDetailQueryKey(resource.id), resource)
     track("resource:update_name")
   },
   onSettled: () => {
     void queryClient.invalidateQueries({ queryKey: resourceListQueryKey })
-  },
+  }
 })
 ```
 
@@ -288,14 +288,14 @@ Dirty editor-store shape:
 ```ts
 const $editor = map<EditorState>({
   dirty: false,
-  config: structuredClone(DEFAULT_CONFIG),
+  config: structuredClone(DEFAULT_CONFIG)
 })
 
 const saveConfig = debounce((config: EditorConfig) => {
   void actions.resourceConfig.update({ config }).then(() => previewStore.invalidate())
 }, 100)
 
-$editor.listen((state) => {
+$editor.listen(state => {
   if (typeof window === "undefined") return
   if (!state.dirty) return
   saveConfig(state.config)
@@ -305,7 +305,7 @@ export const editorService = {
   useState: () => useStore($editor),
   reset: () => $editor.set({ dirty: false, config: structuredClone(DEFAULT_CONFIG) }),
   updateConfig: (config: EditorConfig) => $editor.setKey("config", config),
-  markDirty: () => $editor.setKey("dirty", true),
+  markDirty: () => $editor.setKey("dirty", true)
 }
 ```
 
@@ -339,7 +339,7 @@ const optionalNameSchema = z.union([z.literal(""), ResourceSchema.shape.name])
 
 export function ResourceForm({
   defaultValues,
-  onSubmit,
+  onSubmit
 }: {
   defaultValues?: { name?: string }
   onSubmit: (values: { name?: string }) => Promise<void>
@@ -348,24 +348,24 @@ export function ResourceForm({
     defaultValues: { name: defaultValues?.name ?? "" },
     onSubmit: async ({ value }) => {
       await onSubmit({ name: value.name.trim() || undefined })
-    },
+    }
   })
 
   return (
     <form
-      onSubmit={(event) => {
+      onSubmit={event => {
         event.preventDefault()
         void form.handleSubmit()
       }}
     >
       <form.Field name="name" validators={{ onBlur: optionalNameSchema, onSubmit: optionalNameSchema }}>
-        {(field) => (
+        {field => (
           <input
             id={field.name}
             name={field.name}
             value={field.state.value}
             onBlur={field.handleBlur}
-            onChange={(event) => field.handleChange(event.target.value)}
+            onChange={event => field.handleChange(event.target.value)}
             aria-invalid={field.state.meta.errors.length > 0}
           />
         )}
@@ -413,7 +413,7 @@ Registry + transform shape:
 const widgetConfig = {
   table: [TableEditor, buildTableWidget],
   chart: [ChartEditor, buildChartWidget],
-  metric: [MetricEditor, buildMetricWidget],
+  metric: [MetricEditor, buildMetricWidget]
 } as const
 
 export type WidgetType = keyof typeof widgetConfig

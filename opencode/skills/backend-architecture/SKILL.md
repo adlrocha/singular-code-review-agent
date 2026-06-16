@@ -57,13 +57,13 @@ fastify.post("/mailboxes", {
     auth: ["bearer"],
     input: { schema: CreateMailboxRequest },
     output: { schema: MailboxDTO },
-    guards: [hasActiveOrganization(), scopeAllows("mailbox:create")],
+    guards: [hasActiveOrganization(), scopeAllows("mailbox:create")]
   },
   handler: async (request, reply) => {
     const input = CreateMailboxRequest.parse(request.body)
     const mailbox = await fastify.provisioning.createMailbox(input)
     return reply.code(201).send(mailbox)
-  },
+  }
 })
 ```
 
@@ -234,10 +234,10 @@ Prefer parsing at boundaries over trusting plain TypeScript types:
 ```ts
 const CreateMailboxRequest = z.object({
   localPart: z.string().optional(),
-  name: z.string().optional(),
+  name: z.string().optional()
 })
 
-route.post("/mailboxes", async (request) => {
+route.post("/mailboxes", async request => {
   const input = CreateMailboxRequest.parse(request.body)
   return mailboxService.create(input)
 })
@@ -299,7 +299,7 @@ class BillingService {
   constructor(
     private readonly users: UserRepository,
     private readonly payments: PaymentService,
-    private readonly logger: Logger,
+    private readonly logger: Logger
   ) {}
 }
 ```
@@ -326,7 +326,7 @@ export function createRepository(db: DBClient) {
   return {
     Mailbox: new MailboxRepository(db),
     Webhook: new WebhookRepository(db),
-    Host: new HostRepository(db),
+    Host: new HostRepository(db)
   } as const
 }
 export type DBRepository = ReturnType<typeof createRepository>
@@ -371,16 +371,16 @@ export function defineTool<const T extends ToolConfig>(config: T): T {
 
 const TOOL_CONFIG = {
   catalog: {
-    search: defineTool({ name: "Catalog search", input, output }),
+    search: defineTool({ name: "Catalog search", input, output })
   },
   chart: {
-    cartesian: defineTool({ name: "Cartesian chart", input, output }),
-  },
+    cartesian: defineTool({ name: "Cartesian chart", input, output })
+  }
 } as const
 
 export function getTools(keys: Array<ToolKey | ToolCategory>) {
   const selected = resolveToolConfigs(TOOL_CONFIG, keys)
-  return (context: ToolContext) => Object.fromEntries(selected.map((tool) => [tool.id, tool.withContext(context)]))
+  return (context: ToolContext) => Object.fromEntries(selected.map(tool => [tool.id, tool.withContext(context)]))
 }
 ```
 
@@ -433,7 +433,7 @@ export const env = {
   },
   get isTest() {
     return this.NODE_ENV === "test" || process.env.VITEST === "true"
-  },
+  }
 } as const
 ```
 

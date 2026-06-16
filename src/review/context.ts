@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-import { readJsonFile } from "../lib/json.js";
-import { type GitHubClient } from "../clients/github.js";
-import { filterReviewDiff, parseUnifiedDiff, validCommentRangesFromDiff } from "./diff.js";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs"
+import { dirname } from "node:path"
+import { readJsonFile } from "../lib/json.js"
+import { type GitHubClient } from "../clients/github.js"
+import { filterReviewDiff, parseUnifiedDiff, validCommentRangesFromDiff } from "./diff.js"
 import {
   REVIEW_BOT_LOGIN,
   REVIEW_COMMAND,
@@ -16,19 +16,19 @@ import {
   type ReviewerContext,
   type ReviewThread,
   type ReviewTrigger,
-  type ValidCommentRanges,
-} from "./types.js";
+  type ValidCommentRanges
+} from "./types.js"
 
 type BuildReviewContextOptions = {
-  github: GitHubClient;
-  repository: string;
-  prNumber: number;
-  diffFile: string;
-  eventName?: string | null;
-  eventPath?: string | null;
-  actor?: string | null;
-  botLogin?: string;
-};
+  github: GitHubClient
+  repository: string
+  prNumber: number
+  diffFile: string
+  eventName?: string | null
+  eventPath?: string | null
+  actor?: string | null
+  botLogin?: string
+}
 
 /**
  * Creates a structurally valid context for local commands that may run before
@@ -43,7 +43,7 @@ export function createEmptyReviewContext(overrides: Partial<ReviewContext> = {})
       actor: null,
       trigger_comment: null,
       command: REVIEW_COMMAND,
-      bot_login: REVIEW_BOT_LOGIN,
+      bot_login: REVIEW_BOT_LOGIN
     },
     pr: {},
     diff: { file: "", files: [], ignored_files: [] },
@@ -56,45 +56,45 @@ export function createEmptyReviewContext(overrides: Partial<ReviewContext> = {})
     unresolved_bot_threads: [],
     reviews: [],
     previous_bot_findings: [],
-    action_items: [],
-  };
+    action_items: []
+  }
 
   return {
     ...base,
     ...overrides,
     run: {
       ...base.run,
-      ...overrides.run,
+      ...overrides.run
     },
     diff: {
       ...base.diff,
-      ...overrides.diff,
-    },
-  };
+      ...overrides.diff
+    }
+  }
 }
 
 function readEventPayload(eventPath?: string | null): Record<string, unknown> {
   if (!eventPath || !existsSync(eventPath)) {
-    return {};
+    return {}
   }
 
-  return readJsonFile<Record<string, unknown>>(eventPath, {});
+  return readJsonFile<Record<string, unknown>>(eventPath, {})
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
 }
 
 function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value ? value : null;
+  return typeof value === "string" && value ? value : null
 }
 
 function numberValue(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
 function booleanValue(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
+  return typeof value === "boolean" ? value : null
 }
 
 /**
@@ -102,15 +102,15 @@ function booleanValue(value: unknown): boolean | null {
  * prompts and review tools.
  */
 export function readEventContext(options: {
-  eventName?: string | null;
-  eventPath?: string | null;
-  actor?: string | null;
+  eventName?: string | null
+  eventPath?: string | null
+  actor?: string | null
 }): ReviewTrigger {
-  const eventName = options.eventName || null;
-  const payload = readEventPayload(options.eventPath);
-  const comment = asRecord(payload.comment);
-  const commentUser = asRecord(comment.user);
-  const action = stringValue(payload.action);
+  const eventName = options.eventName || null
+  const payload = readEventPayload(options.eventPath)
+  const comment = asRecord(payload.comment)
+  const commentUser = asRecord(comment.user)
+  const action = stringValue(payload.action)
 
   const triggerComment =
     numberValue(comment.id) !== null
@@ -118,35 +118,35 @@ export function readEventContext(options: {
           id: numberValue(comment.id) as number,
           user: stringValue(commentUser.login),
           body: stringValue(comment.body) || "",
-          html_url: stringValue(comment.html_url),
+          html_url: stringValue(comment.html_url)
         }
-      : null;
+      : null
 
-  let reason: ReviewTrigger["reason"] = "manual";
+  let reason: ReviewTrigger["reason"] = "manual"
   if (eventName === "issue_comment") {
-    reason = "mention";
+    reason = "mention"
   } else if (eventName === "pull_request" && action === "ready_for_review") {
-    reason = "ready_for_review";
+    reason = "ready_for_review"
   } else if (eventName === "pull_request" && action === "opened") {
-    reason = "opened";
+    reason = "opened"
   } else if (eventName === "pull_request" && action === "synchronize") {
-    reason = "synchronize";
+    reason = "synchronize"
   } else if (eventName === "workflow_dispatch") {
-    reason = "workflow_dispatch";
+    reason = "workflow_dispatch"
   }
 
   return {
     event_name: eventName,
     reason,
     actor: options.actor || stringValue(asRecord(payload.sender).login),
-    trigger_comment: triggerComment,
-  };
+    trigger_comment: triggerComment
+  }
 }
 
 function containsMention(body: unknown, botLogin: string, command: string): boolean {
-  const text = String(body || "").toLowerCase();
-  const needles = [command, botLogin ? `@${botLogin}` : null].filter(Boolean).map((value) => String(value).toLowerCase());
-  return needles.some((needle) => text.includes(needle));
+  const text = String(body || "").toLowerCase()
+  const needles = [command, botLogin ? `@${botLogin}` : null].filter(Boolean).map(value => String(value).toLowerCase())
+  return needles.some(needle => text.includes(needle))
 }
 
 /**
@@ -154,15 +154,15 @@ function containsMention(body: unknown, botLogin: string, command: string): bool
  * reviewer should answer before or during the review.
  */
 export function buildActionItems(options: {
-  trigger: ReviewTrigger;
-  issueComments: IssueComment[];
-  reviewComments: ReviewComment[];
-  reviewThreads: ReviewThread[];
-  reviewThreadsAvailable: boolean;
-  botLogin: string;
-  command: string;
+  trigger: ReviewTrigger
+  issueComments: IssueComment[]
+  reviewComments: ReviewComment[]
+  reviewThreads: ReviewThread[]
+  reviewThreadsAvailable: boolean
+  botLogin: string
+  command: string
 }): ReviewActionItem[] {
-  const actionItems: ReviewActionItem[] = [];
+  const actionItems: ReviewActionItem[] = []
 
   if (options.trigger.trigger_comment) {
     actionItems.push({
@@ -170,8 +170,8 @@ export function buildActionItems(options: {
       kind: "trigger_request",
       actor: options.trigger.trigger_comment.user,
       body: options.trigger.trigger_comment.body,
-      comment_id: options.trigger.trigger_comment.id,
-    });
+      comment_id: options.trigger.trigger_comment.id
+    })
   }
 
   for (const comment of options.issueComments || []) {
@@ -181,8 +181,8 @@ export function buildActionItems(options: {
         kind: "mentioned",
         actor: comment.user?.login || null,
         body: comment.body || "",
-        comment_id: comment.id,
-      });
+        comment_id: comment.id
+      })
     }
   }
 
@@ -191,8 +191,12 @@ export function buildActionItems(options: {
     // exposes resolution status and thread grouping. The REST fallback below
     // only sees flat review comments.
     for (const thread of options.reviewThreads || []) {
-      if (thread.is_resolved || thread.top_level_author !== options.botLogin || thread.latest_author === options.botLogin) {
-        continue;
+      if (
+        thread.is_resolved ||
+        thread.top_level_author !== options.botLogin ||
+        thread.latest_author === options.botLogin
+      ) {
+        continue
       }
 
       if (thread.top_level_comment_id) {
@@ -205,36 +209,36 @@ export function buildActionItems(options: {
           latest_reply_id: thread.latest_comment_id,
           review_thread_id: thread.id,
           path: thread.path,
-          line: thread.line,
-        });
+          line: thread.line
+        })
       }
     }
-    return actionItems;
+    return actionItems
   }
 
   if (!options.botLogin) {
-    return actionItems;
+    return actionItems
   }
 
-  const byParent = new Map<number, ReviewComment[]>();
+  const byParent = new Map<number, ReviewComment[]>()
   for (const comment of options.reviewComments || []) {
-    const parentId = comment.in_reply_to_id || comment.id;
+    const parentId = comment.in_reply_to_id || comment.id
     if (!byParent.has(parentId)) {
-      byParent.set(parentId, []);
+      byParent.set(parentId, [])
     }
-    byParent.get(parentId)?.push(comment);
+    byParent.get(parentId)?.push(comment)
   }
 
   for (const [parentId, comments] of byParent.entries()) {
-    const topLevel = comments.find((comment) => Number(comment.id) === Number(parentId));
+    const topLevel = comments.find(comment => Number(comment.id) === Number(parentId))
     if (!topLevel || topLevel.user?.login !== options.botLogin) {
-      continue;
+      continue
     }
 
     const sorted = comments
       .slice()
-      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
-    const latest = sorted[sorted.length - 1];
+      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
+    const latest = sorted[sorted.length - 1]
     if (latest?.user?.login && latest.user.login !== options.botLogin) {
       actionItems.push({
         id: `review-comment:${parentId}`,
@@ -242,21 +246,21 @@ export function buildActionItems(options: {
         actor: latest.user.login,
         body: latest.body || "",
         reply_to_comment_id: Number(parentId),
-        latest_reply_id: latest.id,
-      });
+        latest_reply_id: latest.id
+      })
     }
   }
 
-  return actionItems;
+  return actionItems
 }
 
 function compactPullRequest(value: unknown): AuditorContext["pr"] {
-  const record = asRecord(value);
-  const user = asRecord(record.user);
-  const author = asRecord(record.author);
-  const base = asRecord(record.base);
-  const head = asRecord(record.head);
-  const headRepo = asRecord(head.repo);
+  const record = asRecord(value)
+  const user = asRecord(record.user)
+  const author = asRecord(record.author)
+  const base = asRecord(record.base)
+  const head = asRecord(record.head)
+  const headRepo = asRecord(head.repo)
 
   return {
     number: numberValue(record.number),
@@ -270,8 +274,8 @@ function compactPullRequest(value: unknown): AuditorContext["pr"] {
     url: stringValue(record.html_url) || stringValue(record.url),
     is_draft: booleanValue(record.isDraft) ?? booleanValue(record.draft),
     review_decision: stringValue(record.reviewDecision),
-    head_repository: stringValue(headRepo.full_name),
-  };
+    head_repository: stringValue(headRepo.full_name)
+  }
 }
 
 function compactReviewComment(comment: ReviewComment): AuditorContext["previous_bot_findings"][number] {
@@ -285,13 +289,13 @@ function compactReviewComment(comment: ReviewComment): AuditorContext["previous_
     body: comment.body || "",
     html_url: comment.html_url || null,
     user_login: comment.user?.login || null,
-    created_at: comment.created_at || null,
-  };
+    created_at: comment.created_at || null
+  }
 }
 
 function compactReviewThread(thread: ReviewThread): AuditorContext["unresolved_bot_threads"][number] {
-  const topLevel = thread.comments[0] || null;
-  const latest = thread.comments[thread.comments.length - 1] || null;
+  const topLevel = thread.comments[0] || null
+  const latest = thread.comments[thread.comments.length - 1] || null
 
   return {
     id: thread.id,
@@ -308,38 +312,38 @@ function compactReviewThread(thread: ReviewThread): AuditorContext["unresolved_b
     latest_author: thread.latest_author,
     latest_comment_id: thread.latest_comment_id,
     latest_body: latest?.body || "",
-    latest_html_url: latest?.html_url || null,
-  };
+    latest_html_url: latest?.html_url || null
+  }
 }
 
 function numberRanges(lines: number[] | undefined): CompactLineRanges {
-  const sorted = Array.from(new Set(lines || [])).sort((a, b) => a - b);
-  const ranges: CompactLineRanges = [];
-  let start: number | null = null;
-  let end: number | null = null;
+  const sorted = Array.from(new Set(lines || [])).sort((a, b) => a - b)
+  const ranges: CompactLineRanges = []
+  let start: number | null = null
+  let end: number | null = null
 
   const pushCurrent = () => {
     if (start === null || end === null) {
-      return;
+      return
     }
-    ranges.push(start === end ? String(start) : `${start}-${end}`);
-  };
+    ranges.push(start === end ? String(start) : `${start}-${end}`)
+  }
 
   for (const line of sorted) {
     if (start === null || end === null) {
-      start = line;
-      end = line;
+      start = line
+      end = line
     } else if (line === end + 1) {
-      end = line;
+      end = line
     } else {
-      pushCurrent();
-      start = line;
-      end = line;
+      pushCurrent()
+      start = line
+      end = line
     }
   }
-  pushCurrent();
+  pushCurrent()
 
-  return ranges;
+  return ranges
 }
 
 function compactCommentRanges(ranges: ValidCommentRanges): ModelCommentRanges {
@@ -350,10 +354,10 @@ function compactCommentRanges(ranges: ValidCommentRanges): ModelCommentRanges {
         added: numberRanges(value.added_lines),
         deleted: numberRanges(value.deleted_lines),
         right: numberRanges(value.right_lines),
-        left: numberRanges(value.left_lines),
-      },
-    ]),
-  );
+        left: numberRanges(value.left_lines)
+      }
+    ])
+  )
 }
 
 function compactIssueComment(comment: IssueComment): ReviewerContext["issue_comments"][number] {
@@ -362,13 +366,13 @@ function compactIssueComment(comment: IssueComment): ReviewerContext["issue_comm
     user_login: comment.user?.login || null,
     body: comment.body || "",
     html_url: comment.html_url || null,
-    author_association: comment.author_association || null,
-  };
+    author_association: comment.author_association || null
+  }
 }
 
 function compactReview(value: unknown): ReviewerContext["recent_reviews"][number] {
-  const record = asRecord(value);
-  const user = asRecord(record.user);
+  const record = asRecord(value)
+  const user = asRecord(record.user)
 
   return {
     id: numberValue(record.id),
@@ -377,8 +381,8 @@ function compactReview(value: unknown): ReviewerContext["recent_reviews"][number
     body: stringValue(record.body) || "",
     submitted_at: stringValue(record.submitted_at) || stringValue(record.submittedAt),
     commit_id: stringValue(record.commit_id) || stringValue(record.commitId),
-    html_url: stringValue(record.html_url) || stringValue(record.url),
-  };
+    html_url: stringValue(record.html_url) || stringValue(record.url)
+  }
 }
 
 /**
@@ -394,13 +398,13 @@ export function buildAuditorContext(context: ReviewContext): AuditorContext {
     diff: {
       file: context.diff.file,
       files: Array.isArray(context.diff.files) ? context.diff.files : [],
-      ignored_files: Array.isArray(context.diff.ignored_files) ? context.diff.ignored_files : [],
+      ignored_files: Array.isArray(context.diff.ignored_files) ? context.diff.ignored_files : []
     },
     review_threads_available: context.review_threads_available,
     previous_bot_findings: (context.previous_bot_findings || []).map(compactReviewComment),
     unresolved_bot_threads: (context.unresolved_bot_threads || []).map(compactReviewThread),
-    action_items: context.action_items || [],
-  };
+    action_items: context.action_items || []
+  }
 }
 
 /**
@@ -410,7 +414,7 @@ export function buildAuditorContext(context: ReviewContext): AuditorContext {
  * names, and compressed line ranges.
  */
 export function buildReviewerContext(context: ReviewContext): ReviewerContext {
-  const auditorContext = buildAuditorContext(context);
+  const auditorContext = buildAuditorContext(context)
 
   return {
     ...auditorContext,
@@ -418,11 +422,11 @@ export function buildReviewerContext(context: ReviewContext): ReviewerContext {
       file: auditorContext.diff.file,
       files: auditorContext.diff.files,
       ignored: auditorContext.diff.ignored_files,
-      ranges: compactCommentRanges(context.valid_comment_ranges || {}),
+      ranges: compactCommentRanges(context.valid_comment_ranges || {})
     },
     issue_comments: (context.issue_comments || []).map(compactIssueComment),
-    recent_reviews: (context.reviews || []).map(compactReview),
-  };
+    recent_reviews: (context.reviews || []).map(compactReview)
+  }
 }
 
 /**
@@ -431,19 +435,19 @@ export function buildReviewerContext(context: ReviewContext): ReviewerContext {
  * serialized `buildReviewerContext` projection instead.
  */
 export async function buildReviewContext(options: BuildReviewContextOptions): Promise<ReviewContext> {
-  const botLogin = options.botLogin || REVIEW_BOT_LOGIN;
-  const command = REVIEW_COMMAND;
+  const botLogin = options.botLogin || REVIEW_BOT_LOGIN
+  const command = REVIEW_COMMAND
   const trigger = readEventContext({
     eventName: options.eventName,
     eventPath: options.eventPath,
-    actor: options.actor,
-  });
+    actor: options.actor
+  })
 
-  const rawDiffText = await options.github.getPullRequestDiff(options.prNumber);
-  const filteredDiff = filterReviewDiff(rawDiffText);
-  const diffText = filteredDiff.text;
-  mkdirSync(dirname(options.diffFile), { recursive: true });
-  writeFileSync(options.diffFile, diffText, { mode: 0o600 });
+  const rawDiffText = await options.github.getPullRequestDiff(options.prNumber)
+  const filteredDiff = filterReviewDiff(rawDiffText)
+  const diffText = filteredDiff.text
+  mkdirSync(dirname(options.diffFile), { recursive: true })
+  writeFileSync(options.diffFile, diffText, { mode: 0o600 })
 
   // Fetch independent GitHub surfaces in parallel so the gathering phase is
   // bounded by the slowest API call rather than their sum.
@@ -452,24 +456,24 @@ export async function buildReviewContext(options: BuildReviewContextOptions): Pr
     options.github.listIssueComments(options.prNumber),
     options.github.listReviewComments(options.prNumber),
     options.github.listReviews(options.prNumber),
-    options.github.listReviewThreads(options.prNumber),
-  ]);
-  const reviewThreads = reviewThreadsResult.threads;
-  const unresolvedReviewThreads = reviewThreads.filter((thread) => !thread.is_resolved);
-  const unresolvedBotThreads = unresolvedReviewThreads.filter((thread) => thread.top_level_author === botLogin);
+    options.github.listReviewThreads(options.prNumber)
+  ])
+  const reviewThreads = reviewThreadsResult.threads
+  const unresolvedReviewThreads = reviewThreads.filter(thread => !thread.is_resolved)
+  const unresolvedBotThreads = unresolvedReviewThreads.filter(thread => thread.top_level_author === botLogin)
 
   return {
     generated_at: new Date().toISOString(),
     run: {
       ...trigger,
       command,
-      bot_login: botLogin,
+      bot_login: botLogin
     },
     pr,
     diff: {
       file: options.diffFile,
       ignored_files: filteredDiff.ignoredFiles,
-      files: parseUnifiedDiff(diffText).files.map((file) => file.path),
+      files: parseUnifiedDiff(diffText).files.map(file => file.path)
     },
     valid_comment_ranges: validCommentRangesFromDiff(diffText),
     issue_comments: issueComments,
@@ -479,7 +483,9 @@ export async function buildReviewContext(options: BuildReviewContextOptions): Pr
     unresolved_review_threads: unresolvedReviewThreads,
     unresolved_bot_threads: unresolvedBotThreads,
     reviews,
-    previous_bot_findings: reviewComments.filter((comment) => comment.user?.login === botLogin && !comment.in_reply_to_id),
+    previous_bot_findings: reviewComments.filter(
+      comment => comment.user?.login === botLogin && !comment.in_reply_to_id
+    ),
     action_items: buildActionItems({
       trigger,
       issueComments,
@@ -487,7 +493,7 @@ export async function buildReviewContext(options: BuildReviewContextOptions): Pr
       reviewThreads,
       reviewThreadsAvailable: reviewThreadsResult.available,
       botLogin,
-      command,
-    }),
-  };
+      command
+    })
+  }
 }

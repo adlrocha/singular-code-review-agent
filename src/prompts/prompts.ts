@@ -1,17 +1,17 @@
-import { readFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs"
+import { dirname, join, relative } from "node:path"
+import { fileURLToPath } from "node:url"
 
-export type PromptName = "gate" | "review" | "audit" | "synthesis";
+export type PromptName = "gate" | "review" | "audit" | "synthesis"
 
-const PROMPT_DIR = dirname(fileURLToPath(import.meta.url));
+const PROMPT_DIR = dirname(fileURLToPath(import.meta.url))
 
 function loadPrompt(name: PromptName): string {
-  return readFileSync(join(PROMPT_DIR, `${name}.md`), "utf8");
+  return readFileSync(join(PROMPT_DIR, `${name}.md`), "utf8")
 }
 
 function interpolate(template: string, values: Record<string, string>): string {
-  return template.replace(/\{\{([a-zA-Z0-9_]+)\}\}/gu, (_match, key: string) => values[key] || "");
+  return template.replace(/\{\{([a-zA-Z0-9_]+)\}\}/gu, (_match, key: string) => values[key] || "")
 }
 
 /**
@@ -19,7 +19,7 @@ function interpolate(template: string, values: Record<string, string>): string {
  * skip re-review, or escalate into the full review pipeline.
  */
 export function buildGatePrompt(values: { contextFile: string; deltaFile: string }): string {
-  return interpolate(loadPrompt("gate"), values);
+  return interpolate(loadPrompt("gate"), values)
 }
 
 /**
@@ -27,7 +27,7 @@ export function buildGatePrompt(values: { contextFile: string; deltaFile: string
  * OpenCode gets the larger context/diff content as file attachments.
  */
 export function buildReviewPrompt(values: { contextFile: string; diffFile: string }): string {
-  return interpolate(loadPrompt("review"), values);
+  return interpolate(loadPrompt("review"), values)
 }
 
 /**
@@ -35,19 +35,19 @@ export function buildReviewPrompt(values: { contextFile: string; diffFile: strin
  * OpenCode `auditor` agent instructions.
  */
 export function buildAuditPrompt(values: {
-  workspace: string;
-  queueFile: string;
-  validatedFile: string;
-  auditorContextFile: string;
-  reviewerOutputFile: string;
+  workspace: string
+  queueFile: string
+  validatedFile: string
+  auditorContextFile: string
+  reviewerOutputFile: string
 }): string {
   const queuePromptPath = values.queueFile.startsWith(`${values.workspace}/`)
     ? relative(values.workspace, values.queueFile)
-    : values.queueFile;
+    : values.queueFile
   return interpolate(loadPrompt("audit"), {
     ...values,
-    queuePromptPath,
-  });
+    queuePromptPath
+  })
 }
 
 /**
@@ -55,9 +55,9 @@ export function buildAuditPrompt(values: {
  * the OpenCode `auditor` agent instructions.
  */
 export function buildSynthesisPrompt(values: {
-  reviewerOutputFile: string;
-  validatedFile: string;
-  auditorContextFile: string;
+  reviewerOutputFile: string
+  validatedFile: string
+  auditorContextFile: string
 }): string {
-  return interpolate(loadPrompt("synthesis"), values);
+  return interpolate(loadPrompt("synthesis"), values)
 }
