@@ -39,6 +39,11 @@ test("OpenCode config defines reviewer and auditor agents with scoped permission
     "*": "deny",
     "/tmp/.singular-code-review/**": "allow",
   });
+  assert.deepEqual(config.permission.read, {
+    "*": "allow",
+    "*.env": "allow",
+    "*.env.test": "allow",
+  });
   assert.deepEqual(config.permission.external_directory, {
     "/tmp/.singular-code-review/**": "allow",
   });
@@ -47,16 +52,16 @@ test("OpenCode config defines reviewer and auditor agents with scoped permission
   assert.equal(config.agent.gate.model, "{env:OPENCODE_GATE_MODEL}");
   assert.equal(config.agent.gate.prompt, "{file:./agents/gate.md}");
   assert.equal(config.agent.auditor.prompt, "{file:./agents/auditor.md}");
-  assert.deepEqual(config.agent.reviewer.permission.external_directory, config.permission.external_directory);
-  assert.deepEqual(config.agent.reviewer.permission.edit, config.permission.edit);
-  assert.deepEqual(config.agent.gate.permission.external_directory, config.permission.external_directory);
-  assert.deepEqual(config.agent.auditor.permission.external_directory, config.permission.external_directory);
-  assert.deepEqual(config.agent.auditor.permission.edit, config.permission.edit);
-  assert.equal(config.agent.reviewer.permission.bash, "allow");
-  assert.equal(config.agent.gate.permission.bash, "deny");
-  assert.equal(config.agent.gate.permission.webfetch, "deny");
-  assert.equal(config.agent.auditor.permission.bash, "deny");
-  assert.equal(config.agent.auditor.permission.webfetch, "deny");
+  assert.equal(Object.hasOwn(config.agent.reviewer, "permission"), false);
+  assert.deepEqual(config.agent.gate.permission, {
+    edit: "deny",
+    bash: "deny",
+    webfetch: "deny",
+  });
+  assert.deepEqual(config.agent.auditor.permission, {
+    bash: "deny",
+    webfetch: "deny",
+  });
   assert.equal(fs.existsSync(path.join(repoRoot, "opencode", "agents", "reviewer.md")), true);
   assert.equal(fs.existsSync(path.join(repoRoot, "opencode", "agents", "gate.md")), true);
   assert.equal(fs.existsSync(path.join(repoRoot, "opencode", "agents", "auditor.md")), true);

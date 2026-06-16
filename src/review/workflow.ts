@@ -1,78 +1,88 @@
-import { readFileSync, rmSync } from "node:fs";
-import { isAbsolute, relative } from "node:path";
-import { type GitHubClient } from "../clients/github.js";
-import { type OpenCodeClient, type OpenCodeRunResult } from "../clients/opencode.js";
-import { type RunnerConfig } from "../config/env.js";
-import { type ArtifactPaths, type ArtifactStore } from "../lib/artifacts.js";
-import { type Logger } from "../lib/logger.js";
-import { buildAuditPrompt, buildGatePrompt, buildReviewPrompt, buildSynthesisPrompt } from "../prompts/prompts.js";
-import { applyReviewBanner, buildReviewPayload, enforceReviewBodyLimit } from "./body.js";
-import { buildAuditorContext, buildReviewContext, buildReviewerContext } from "./context.js";
-import { parseGateDecision, prepareGate } from "./gate.js";
-import { clearQueue, loadQueue, persistValidation, setConclusion, validateQueue } from "./queue.js";
-import { type GateContext, type GateDecision, type ReviewContext, type ValidatedReviewQueue } from "./types.js";
+import { existsSync, readFileSync, rmSync } from "node:fs"
+import { isAbsolute, relative } from "node:path"
+import { type GitHubClient } from "../clients/github.js"
+import { type OpenCodeClient, type OpenCodeRunResult } from "../clients/opencode.js"
+import { type RunnerConfig } from "../config/env.js"
+import { type ArtifactPaths, type ArtifactStore } from "../lib/artifacts.js"
+import { type Logger } from "../lib/logger.js"
+import { buildAuditPrompt, buildGatePrompt, buildReviewPrompt, buildSynthesisPrompt } from "../prompts/prompts.js"
+import { applyReviewBanner, buildReviewPayload, enforceReviewBodyLimit } from "./body.js"
+import { buildAuditorContext, buildReviewContext, buildReviewerContext } from "./context.js"
+import { parseGateDecision, prepareGate } from "./gate.js"
+import { clearQueue, loadQueue, persistValidation, setConclusion, validateQueue } from "./queue.js"
+import { type GateContext, type GateDecision, type ReviewContext, type ValidatedReviewQueue } from "./types.js"
 
 /**
  * Stable phase names for logs, tests, and future workflow documentation.
  * These names describe the product flow, not implementation details.
  */
-export const REVIEW_WORKFLOW_PHASES = ["gathering", "gate", "review", "audit", "synthesis"] as const;
+export const REVIEW_WORKFLOW_PHASES = ["gathering", "gate", "review", "audit", "synthesis"] as const
 
-export type ReviewWorkflowPhase = (typeof REVIEW_WORKFLOW_PHASES)[number];
+export type ReviewWorkflowPhase = (typeof REVIEW_WORKFLOW_PHASES)[number]
 
 export type ReviewWorkflowDependencies = {
-  config: RunnerConfig;
-  artifacts: ArtifactStore;
-  github: GitHubClient;
-  opencode: OpenCodeClient;
-  logger: Logger;
-};
+  config: RunnerConfig
+  artifacts: ArtifactStore
+  github: GitHubClient
+  opencode: OpenCodeClient
+  logger: Logger
+}
 
 export type ReviewWorkflowResult =
   | {
-      status: "skipped";
-      reason: string;
+      status: "skipped"
+      reason: string
     }
   | {
-      status: "answered" | "no-review";
-      reason: string;
+      status: "answered" | "no-review"
+      reason: string
     }
   | {
-      status: "dry-run" | "submitted";
-      inlineComments: number;
-      replies: number;
-      payloadFile: string;
-      validatedFile: string;
-    };
+      status: "dry-run" | "submitted"
+      inlineComments: number
+      replies: number
+      payloadFile: string
+      validatedFile: string
+    }
 
 type OpenCodeReviewPaths = {
-  gateContextPath: string;
-  gateDeltaPath: string;
-  reviewContextPath: string;
-  auditorContextPath: string;
-  diffPath: string;
-  queuePath: string;
-  validatedPath: string;
-  reviewOutputPath: string;
-};
+  gateContextPath: string
+  gateDeltaPath: string
+  reviewContextPath: string
+  auditorContextPath: string
+  diffPath: string
+  queuePath: string
+  validatedPath: string
+  reviewOutputPath: string
+}
 
 type ReviewWorkflowState = ReviewWorkflowDependencies & {
-  paths: ArtifactPaths;
-  opencodePaths: OpenCodeReviewPaths;
-};
+  paths: ArtifactPaths
+  opencodePaths: OpenCodeReviewPaths
+}
 
 function queueHasReviewActions(queueFile: string): boolean {
-  const queue = loadQueue(queueFile);
-  return queue.inlineComments.length > 0 || queue.replies.length > 0;
+  const queue = loadQueue(queueFile)
+  return queue.inlineComments.length > 0 || queue.replies.length > 0
+}
+
+function reviewerOutputSeemsComplete(reviewText: string): boolean {
+  return (
+    /\b(?:verdict|LGTM|looks good|ready to merge|request changes?|block:)\b/iu.test(reviewText) ||
+    /\b(?:no|not any|did not find|didn't find)\s+(?:valid\s+|blocking\s+|actionable\s+)?(?:issues?|findings?|problems?|concerns?)\b/iu.test(
+      reviewText,
+    ) ||
+    /\bnothing\s+(?:actionable|blocking|merge-blocking)\b/iu.test(reviewText)
+  )
 }
 
 function fallbackConclusion(reviewText: string): string {
-  const trimmed = reviewText.trim();
+  const trimmed = reviewText.trim()
   if (trimmed) {
-    return `Automated review completed, but the synthesis pass did not produce a body. Posting the reviewer output so the run still leaves a GitHub review:\n\n${trimmed}`;
+    return `Automated review completed, but the synthesis pass did not produce a body. Posting the reviewer output so the run still leaves a GitHub review:\n\n${trimmed}`
   }
 
-  return "Automated review completed, but the synthesis pass did not produce a body.";
+  return "Automated review completed, but the synthesis pass did not produce a body."
 }
 
 /**
@@ -80,11 +90,11 @@ function fallbackConclusion(reviewText: string): string {
  * file names, while still supporting runtime artifacts outside the checkout.
  */
 function pathForOpenCode(workspace: string, file: string): string {
-  const relativePath = relative(workspace, file);
+  const relativePath = relative(workspace, file)
   if (!relativePath.startsWith("..") && !isAbsolute(relativePath)) {
-    return relativePath;
+    return relativePath
   }
-  return file;
+  return file
 }
 
 function buildOpenCodeReviewPaths(config: RunnerConfig, paths: ArtifactPaths): OpenCodeReviewPaths {
@@ -97,20 +107,20 @@ function buildOpenCodeReviewPaths(config: RunnerConfig, paths: ArtifactPaths): O
     queuePath: pathForOpenCode(config.workspace, paths.queueFile),
     validatedPath: pathForOpenCode(config.workspace, paths.validatedFile),
     reviewOutputPath: pathForOpenCode(config.workspace, paths.reviewOutputFile),
-  };
+  }
 }
 
 function createReviewWorkflowState(deps: ReviewWorkflowDependencies): ReviewWorkflowState {
-  const paths = deps.artifacts.paths;
+  const paths = deps.artifacts.paths
   return {
     ...deps,
     paths,
     opencodePaths: buildOpenCodeReviewPaths(deps.config, paths),
-  };
+  }
 }
 
 function clearStaleGateResult(paths: ArtifactPaths): void {
-  rmSync(paths.gateResultFile, { force: true });
+  rmSync(paths.gateResultFile, { force: true })
 }
 
 /**
@@ -118,14 +128,14 @@ function clearStaleGateResult(paths: ArtifactPaths): void {
  * This is the process-level bridge between the runner and `review_comments`.
  */
 function exposeReviewArtifactsToTools(config: RunnerConfig, paths: ArtifactPaths): void {
-  process.env.REVIEW_QUEUE_FILE = paths.queueFile;
-  process.env.REVIEW_VALIDATION_CONTEXT_FILE = paths.contextFile;
-  process.env.GATE_MODEL_CONTEXT_FILE = paths.gateContextFile;
-  process.env.GATE_DELTA_FILE = paths.gateDeltaFile;
-  process.env.REVIEW_MODEL_CONTEXT_FILE = paths.reviewerContextFile;
-  process.env.AUDIT_MODEL_CONTEXT_FILE = paths.auditorContextFile;
-  process.env.REVIEW_DIFF_FILE = paths.diffFile;
-  process.env.OPENCODE_MODEL = config.model;
+  process.env.REVIEW_QUEUE_FILE = paths.queueFile
+  process.env.REVIEW_VALIDATION_CONTEXT_FILE = paths.contextFile
+  process.env.GATE_MODEL_CONTEXT_FILE = paths.gateContextFile
+  process.env.GATE_DELTA_FILE = paths.gateDeltaFile
+  process.env.REVIEW_MODEL_CONTEXT_FILE = paths.reviewerContextFile
+  process.env.AUDIT_MODEL_CONTEXT_FILE = paths.auditorContextFile
+  process.env.REVIEW_DIFF_FILE = paths.diffFile
+  process.env.OPENCODE_MODEL = config.model
 }
 
 function logPhase(
@@ -134,7 +144,7 @@ function logPhase(
   message: string,
   context?: Record<string, unknown>,
 ): void {
-  logger.info(`${phase}: ${message}`, context);
+  logger.info(`${phase}: ${message}`, context)
 }
 
 /**
@@ -142,12 +152,12 @@ function logPhase(
  * existing comments/threads, trigger context, and bot history.
  */
 async function runGatheringPhase(state: ReviewWorkflowState): Promise<ReviewContext> {
-  const { config, github, artifacts, paths, logger } = state;
+  const { config, github, artifacts, paths, logger } = state
 
   logPhase(logger, "gathering", "building review context", {
     repository: config.repository,
     pr: config.prNumber,
-  });
+  })
 
   const context = await buildReviewContext({
     github,
@@ -158,12 +168,12 @@ async function runGatheringPhase(state: ReviewWorkflowState): Promise<ReviewCont
     eventPath: config.eventPath,
     actor: config.actor,
     botLogin: config.botLogin,
-  });
+  })
 
-  artifacts.writeJson(paths.contextFile, context);
-  artifacts.writeJson(paths.reviewerContextFile, buildReviewerContext(context));
-  artifacts.writeJson(paths.auditorContextFile, buildAuditorContext(context));
-  return context;
+  artifacts.writeJson(paths.contextFile, context)
+  artifacts.writeJson(paths.reviewerContextFile, buildReviewerContext(context))
+  artifacts.writeJson(paths.auditorContextFile, buildAuditorContext(context))
+  return context
 }
 
 /**
@@ -171,10 +181,10 @@ async function runGatheringPhase(state: ReviewWorkflowState): Promise<ReviewCont
  * repository and queue structured findings through the review tools.
  */
 async function runReviewPhase(state: ReviewWorkflowState): Promise<OpenCodeRunResult> {
-  const { config, opencode, paths, opencodePaths, logger } = state;
+  const { config, opencode, paths, opencodePaths, logger } = state
 
-  clearQueue(paths.queueFile);
-  logPhase(logger, "review", "running OpenCode");
+  clearQueue(paths.queueFile)
+  logPhase(logger, "review", "running OpenCode")
 
   return opencode.run({
     workspace: config.workspace,
@@ -189,7 +199,7 @@ async function runReviewPhase(state: ReviewWorkflowState): Promise<OpenCodeRunRe
       contextFile: opencodePaths.reviewContextPath,
       diffFile: opencodePaths.diffPath,
     }),
-  });
+  })
 }
 
 function gateContextForPrompt(context: GateContext, gateDeltaPath: string): GateContext {
@@ -199,26 +209,26 @@ function gateContextForPrompt(context: GateContext, gateDeltaPath: string): Gate
       ...context.delta,
       file: gateDeltaPath,
     },
-  };
+  }
 }
 
 async function postGateAnswer(
   state: ReviewWorkflowState,
   decision: Extract<GateDecision, { decision: "answer" | "no-review" }>,
 ): Promise<ReviewWorkflowResult> {
-  await state.github.createIssueComment(state.config.prNumber, decision.answer);
-  const status = decision.decision === "answer" ? "answered" : "no-review";
+  await state.github.createIssueComment(state.config.prNumber, decision.answer)
+  const status = decision.decision === "answer" ? "answered" : "no-review"
   state.artifacts.writeJson(state.paths.gateResultFile, {
     generated_at: new Date().toISOString(),
     decision: decision.decision,
     status,
     answer: decision.answer,
-  });
-  state.logger.info(`gate: posted ${status} comment`);
+  })
+  state.logger.info(`gate: posted ${status} comment`)
   return {
     status,
     reason: decision.answer,
-  };
+  }
 }
 
 /**
@@ -230,34 +240,34 @@ async function runGatePhase(
   context: ReviewContext,
   diffText: string,
 ): Promise<ReviewWorkflowResult | null> {
-  const { config, opencode, artifacts, paths, opencodePaths, logger } = state;
+  const { config, opencode, artifacts, paths, opencodePaths, logger } = state
   const prepared = prepareGate({
     context,
     workspace: config.workspace,
     diffText,
     botLogin: config.botLogin,
-  });
+  })
 
   if (prepared.action === "run-review") {
-    logPhase(logger, "gate", "skipped; running full review", { reason: prepared.reason });
-    return null;
+    logPhase(logger, "gate", "skipped; running full review", { reason: prepared.reason })
+    return null
   }
 
-  const gateContext = gateContextForPrompt(prepared.context, opencodePaths.gateDeltaPath);
-  artifacts.writeText(paths.gateDeltaFile, prepared.deltaText);
-  artifacts.writeJson(paths.gateContextFile, gateContext);
+  const gateContext = gateContextForPrompt(prepared.context, opencodePaths.gateDeltaPath)
+  artifacts.writeText(paths.gateDeltaFile, prepared.deltaText)
+  artifacts.writeJson(paths.gateContextFile, gateContext)
 
   if (prepared.action === "post") {
-    logPhase(logger, "gate", "resolved without OpenCode", { decision: prepared.decision.decision });
-    return postGateAnswer(state, prepared.decision);
+    logPhase(logger, "gate", "resolved without OpenCode", { decision: prepared.decision.decision })
+    return postGateAnswer(state, prepared.decision)
   }
 
   logPhase(logger, "gate", "running OpenCode", {
     model: config.gateModel,
     delta_mode: gateContext.delta.mode,
-  });
+  })
 
-  let gateRun: OpenCodeRunResult;
+  let gateRun: OpenCodeRunResult
   try {
     gateRun = await opencode.run({
       workspace: config.workspace,
@@ -272,27 +282,31 @@ async function runGatePhase(
         contextFile: opencodePaths.gateContextPath,
         deltaFile: opencodePaths.gateDeltaPath,
       }),
-    });
+    })
   } catch (error) {
-    logger.warn("gate: OpenCode failed; running full review", { error: error instanceof Error ? error.message : String(error) });
-    return null;
+    logger.warn("gate: OpenCode failed; running full review", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
   }
 
-  let decision: GateDecision;
+  let decision: GateDecision
   try {
-    decision = parseGateDecision(gateRun.text);
+    decision = parseGateDecision(gateRun.text)
   } catch (error) {
-    logger.warn("gate: invalid output; running full review", { error: error instanceof Error ? error.message : String(error) });
-    return null;
+    logger.warn("gate: invalid output; running full review", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
   }
 
   if (decision.decision === "review") {
-    logPhase(logger, "gate", "requested full review", { reason: decision.reason });
-    return null;
+    logPhase(logger, "gate", "requested full review", { reason: decision.reason })
+    return null
   }
 
-  logPhase(logger, "gate", "resolved without full review", { decision: decision.decision });
-  return postGateAnswer(state, decision);
+  logPhase(logger, "gate", "resolved without full review", { decision: decision.decision })
+  return postGateAnswer(state, decision)
 }
 
 /**
@@ -305,11 +319,11 @@ function validateCurrentQueue(
   phase: ReviewWorkflowPhase,
   message: string,
 ): ValidatedReviewQueue {
-  const validated = validateQueue(loadQueue(state.paths.queueFile), context);
-  state.artifacts.writeJson(state.paths.validatedFile, validated);
-  persistValidation(state.paths.queueFile, validated);
-  logPhase(state.logger, phase, message, validated.stats);
-  return validated;
+  const validated = validateQueue(loadQueue(state.paths.queueFile), context)
+  state.artifacts.writeJson(state.paths.validatedFile, validated)
+  persistValidation(state.paths.queueFile, validated)
+  logPhase(state.logger, phase, message, validated.stats)
+  return validated
 }
 
 /**
@@ -321,15 +335,15 @@ async function runAuditPhase(
   context: ReviewContext,
   currentValidation: ValidatedReviewQueue,
 ): Promise<ValidatedReviewQueue> {
-  const { config, opencode, paths, opencodePaths, logger } = state;
+  const { config, opencode, paths, opencodePaths, logger } = state
 
   if (!queueHasReviewActions(paths.queueFile)) {
     // Nothing actionable was queued, so there is no queue file work for audit.
-    logPhase(logger, "audit", "review queue is empty; skipping");
-    return currentValidation;
+    logPhase(logger, "audit", "review queue is empty; skipping")
+    return currentValidation
   }
 
-  logPhase(logger, "audit", "running OpenCode");
+  logPhase(logger, "audit", "running OpenCode")
   await opencode.run({
     workspace: config.workspace,
     outputFile: paths.auditOutputFile,
@@ -351,19 +365,34 @@ async function runAuditPhase(
       auditorContextFile: opencodePaths.auditorContextPath,
       reviewerOutputFile: opencodePaths.reviewOutputPath,
     }),
-  });
+  })
 
-  return validateCurrentQueue(state, context, "audit", "post-audit validation");
+  return validateCurrentQueue(state, context, "audit", "post-audit validation")
 }
 
 /**
  * Produces the top-level GitHub review body. The model writes body content only;
  * bannering, truncation, and final validation stay mechanical in the runner.
  */
-async function runSynthesisPhase(state: ReviewWorkflowState, reviewPass: OpenCodeRunResult): Promise<string> {
-  const { config, opencode, paths, opencodePaths, logger } = state;
+async function runSynthesisPhase(
+  state: ReviewWorkflowState,
+  context: ReviewContext,
+  reviewPass: OpenCodeRunResult,
+): Promise<string> {
+  const { config, opencode, artifacts, paths, opencodePaths, logger } = state
+  const reviewerOutputText = existsSync(paths.reviewOutputFile)
+    ? readFileSync(paths.reviewOutputFile, "utf8")
+    : reviewPass.text
+  const reviewSeemsComplete = reviewerOutputSeemsComplete(reviewerOutputText)
+  artifacts.writeJson(paths.auditorContextFile, {
+    ...buildAuditorContext(context),
+    review_seems_complete: reviewSeemsComplete,
+  })
+  if (!reviewSeemsComplete) {
+    logger.warn("synthesis: reviewer output does not include terminal review language")
+  }
 
-  logPhase(logger, "synthesis", "running OpenCode");
+  logPhase(logger, "synthesis", "running OpenCode")
   const synthesis = await opencode.run({
     workspace: config.workspace,
     outputFile: paths.synthesisOutputFile,
@@ -379,9 +408,9 @@ async function runSynthesisPhase(state: ReviewWorkflowState, reviewPass: OpenCod
       validatedFile: opencodePaths.validatedPath,
       auditorContextFile: opencodePaths.auditorContextPath,
     }),
-  });
+  })
 
-  return synthesis.text.trim() || fallbackConclusion(reviewPass.text);
+  return synthesis.text.trim() || fallbackConclusion(reviewPass.text)
 }
 
 /**
@@ -393,31 +422,31 @@ async function submitReviewResult(
   context: ReviewContext,
   synthesized: string,
 ): Promise<ReviewWorkflowResult> {
-  const { config, github, artifacts, paths, logger } = state;
+  const { config, github, artifacts, paths, logger } = state
 
-  const finalBody = enforceReviewBodyLimit(applyReviewBanner(synthesized, config.model));
-  setConclusion(paths.queueFile, finalBody);
+  const finalBody = enforceReviewBodyLimit(applyReviewBanner(synthesized, config.model))
+  setConclusion(paths.queueFile, finalBody)
 
   // Revalidate after setting the conclusion so the submitted payload is built
   // from exactly the queue state persisted to runtime artifacts.
-  const validated = validateCurrentQueue(state, context, "synthesis", "final review validation");
-  const payload = buildReviewPayload(validated);
-  artifacts.writeJson(paths.payloadFile, payload);
+  const validated = validateCurrentQueue(state, context, "synthesis", "final review validation")
+  const payload = buildReviewPayload(validated)
+  artifacts.writeJson(paths.payloadFile, payload)
 
   if (validated.inlineComments.length > 0 || validated.conclusion) {
-    await github.submitReview(config.prNumber, payload);
+    await github.submitReview(config.prNumber, payload)
     logger.info(config.dryRun ? "prepared dry-run review" : "submitted review", {
       inlineComments: validated.inlineComments.length,
-    });
+    })
   }
 
   for (const reply of validated.replies) {
-    await github.submitReply(config.prNumber, reply.to, reply.body);
+    await github.submitReply(config.prNumber, reply.to, reply.body)
   }
   if (validated.replies.length > 0) {
     logger.info(config.dryRun ? "prepared dry-run replies" : "submitted review replies", {
       replies: validated.replies.length,
-    });
+    })
   }
 
   return {
@@ -426,7 +455,7 @@ async function submitReviewResult(
     replies: validated.replies.length,
     payloadFile: paths.payloadFile,
     validatedFile: paths.validatedFile,
-  };
+  }
 }
 
 /**
@@ -434,36 +463,36 @@ async function submitReviewResult(
  * submission. Expected non-submission outcomes are returned explicitly.
  */
 export async function runReviewWorkflow(deps: ReviewWorkflowDependencies): Promise<ReviewWorkflowResult> {
-  const state = createReviewWorkflowState(deps);
-  const { config, paths, logger } = state;
+  const state = createReviewWorkflowState(deps)
+  const { config, paths, logger } = state
 
-  clearStaleGateResult(paths);
-  exposeReviewArtifactsToTools(config, paths);
+  clearStaleGateResult(paths)
+  exposeReviewArtifactsToTools(config, paths)
 
-  const context = await runGatheringPhase(state);
-  const diffText = readFileSync(paths.diffFile, "utf8");
+  const context = await runGatheringPhase(state)
+  const diffText = readFileSync(paths.diffFile, "utf8")
   if (config.dryRun) {
-    logPhase(logger, "gate", "skipped for dry run; running full review");
+    logPhase(logger, "gate", "skipped for dry run; running full review")
   } else {
-    const gateResult = await runGatePhase(state, context, diffText);
+    const gateResult = await runGatePhase(state, context, diffText)
     if (gateResult) {
-      return gateResult;
+      return gateResult
     }
   }
 
   if (!diffText.trim()) {
     // Empty diffs are valid PR states, but there is nothing safe to attach
     // line-level feedback to.
-    logPhase(logger, "gathering", "PR diff is empty; skipping review");
-    return { status: "skipped", reason: "PR diff is empty" };
+    logPhase(logger, "gathering", "PR diff is empty; skipping review")
+    return { status: "skipped", reason: "PR diff is empty" }
   }
 
-  const reviewPass = await runReviewPhase(state);
-  const reviewValidation = validateCurrentQueue(state, context, "review", "finding validation");
-  await runAuditPhase(state, context, reviewValidation);
-  const synthesized = await runSynthesisPhase(state, reviewPass);
+  const reviewPass = await runReviewPhase(state)
+  const reviewValidation = validateCurrentQueue(state, context, "review", "finding validation")
+  await runAuditPhase(state, context, reviewValidation)
+  const synthesized = await runSynthesisPhase(state, context, reviewPass)
 
-  return submitReviewResult(state, context, synthesized);
+  return submitReviewResult(state, context, synthesized)
 }
 
-export const runReview = runReviewWorkflow;
+export const runReview = runReviewWorkflow

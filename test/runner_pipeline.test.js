@@ -234,6 +234,7 @@ test("runner executes review, audit, synthesis, validation, and submission in or
   assert.deepEqual(auditorContext.diff.files, ["src/app.js", "src/new.js"]);
   assert.equal(Object.hasOwn(auditorContext, "valid_comment_ranges"), false);
   assert.equal(Object.hasOwn(auditorContext, "review_comments"), false);
+  assert.equal(auditorContext.review_seems_complete, false);
   assert.deepEqual(github.submitted.reviews, [
     {
       body: "> reviewer · minimax-m3\n\nRequest changes: keep the queued finding.",
@@ -284,8 +285,50 @@ test("runner skips audit when the first pass queues no actions", async () => {
   assert.equal(calls.length, 2);
   assert.match(calls[0], /Review this pull request/u);
   assert.match(calls[1], /Write the final GitHub pull request review body/u);
+  assert.equal(JSON.parse(fs.readFileSync(config.artifacts.auditorContextFile, "utf8")).review_seems_complete, true);
   assert.equal(github.submitted.reviews[0].body, "> reviewer · minimax-m3\n\nLGTM. The change is narrow and safe.");
   assert.deepEqual(github.submitted.reviews[0].comments, []);
+});
+
+test("runner lets synthesis post an incomplete verdict for unfinished empty reviews", async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "runner-interrupted-empty-"));
+  fs.mkdirSync(path.join(workspace, ".git"));
+  const config = createConfig(workspace, true);
+  const artifacts = new ArtifactStore(config.artifacts);
+  const github = createGitHub(fs.readFileSync(fixture, "utf8"));
+  const calls = [];
+
+  const opencode = {
+    async run(options) {
+      calls.push(options.prompt);
+      if (options.prompt.includes("Review this pull request")) {
+        return { text: "I'll review the PR. Let me inspect the changed files.", sessionId: "review-session", args: [] };
+      }
+      if (options.prompt.includes("Write the final GitHub pull request review body")) {
+        const auditorContext = JSON.parse(fs.readFileSync(config.artifacts.auditorContextFile, "utf8"));
+        assert.equal(auditorContext.review_seems_complete, false);
+        return {
+          text: "The automated review appears to have stopped before completing its analysis.\n\n## Verdict\n\n❓ Incomplete review: automated reviewer stopped before producing a final conclusion.",
+          sessionId: "post-session",
+          args: [],
+        };
+      }
+      throw new Error("audit should not run for an empty queue");
+    },
+  };
+
+  const result = await runReviewWorkflow({
+    config,
+    artifacts,
+    github: github.client,
+    opencode,
+    logger: createLogger(),
+  });
+
+  assert.equal(result.status, "dry-run");
+  assert.equal(calls.length, 2);
+  assert.match(github.submitted.reviews[0].body, /❓ Incomplete review: automated reviewer stopped/u);
+  assert.deepEqual(github.submitted.replies, []);
 });
 
 test("runner uses gate answer for direct mention questions without submitting a review", async () => {
