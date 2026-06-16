@@ -3,6 +3,11 @@
   "default_agent": "reviewer",
   "model": "{env:OPENCODE_MODEL}",
   "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "allow",
+      "*.env.test": "allow"
+    },
     "external_directory": {
       "/tmp/.singular-code-review/**": "allow"
     },
@@ -18,18 +23,7 @@
       "description": "Reviews pull requests and queues structured GitHub review feedback.",
       "mode": "primary",
       "model": "{env:OPENCODE_MODEL}",
-      "prompt": "{file:./agents/reviewer.md}",
-      "permission": {
-        "external_directory": {
-          "/tmp/.singular-code-review/**": "allow"
-        },
-        "edit": {
-          "*": "deny",
-          "/tmp/.singular-code-review/**": "allow"
-        },
-        "bash": "allow",
-        "webfetch": "allow"
-      }
+      "prompt": "{file:./agents/reviewer.md}"
     },
     "gate": {
       "description": "Routes review triggers before the full review pipeline runs.",
@@ -37,12 +31,7 @@
       "model": "{env:OPENCODE_GATE_MODEL}",
       "prompt": "{file:./agents/gate.md}",
       "permission": {
-        "external_directory": {
-          "/tmp/.singular-code-review/**": "allow"
-        },
-        "edit": {
-          "*": "deny"
-        },
+        "edit": "deny",
         "bash": "deny",
         "webfetch": "deny"
       }
@@ -53,13 +42,6 @@
       "model": "{env:OPENCODE_MODEL}",
       "prompt": "{file:./agents/auditor.md}",
       "permission": {
-        "external_directory": {
-          "/tmp/.singular-code-review/**": "allow"
-        },
-        "edit": {
-          "*": "deny",
-          "/tmp/.singular-code-review/**": "allow"
-        },
         "bash": "deny",
         "webfetch": "deny"
       }
