@@ -129,7 +129,10 @@ export type ReviewComment = {
   startSide?: string | null
   in_reply_to_id?: number | null
   created_at?: string | null
+  updated_at?: string | null
   html_url?: string | null
+  url?: string | null
+  pull_request_review_id?: number | null
   user?: GitHubUser | null
 }
 
@@ -144,6 +147,25 @@ export type PullRequestReview = {
   commit_id?: string | null
   commitId?: string | null
   user?: GitHubUser | null
+}
+
+export type PullRequestCommit = {
+  sha?: string | null
+  html_url?: string | null
+  author?: GitHubUser | null
+  committer?: GitHubUser | null
+  parents?: Array<{ sha?: string | null }> | null
+  commit?: {
+    message?: string | null
+    author?: {
+      name?: string | null
+      date?: string | null
+    } | null
+    committer?: {
+      name?: string | null
+      date?: string | null
+    } | null
+  } | null
 }
 
 export type ReviewThreadComment = {
@@ -205,8 +227,28 @@ export type ReviewTrigger = {
     id: number
     user: string | null
     body: string
-    html_url: string | null
   } | null
+}
+
+export type ReviewTimelineEvent = {
+  id: string
+  kind: "commit" | "merge" | "review" | "issue_comment" | "review_comment" | "thread_comment"
+  at: string | null
+  actor: string | null
+  ref: string | null
+  state?: string | null
+  location?: string | null
+  summary: string
+  commit_id?: string | null
+  review_id?: number | null
+  comment_id?: number | null
+  thread_id?: string | null
+}
+
+export type ReviewTimelineContext = {
+  full_event_file: string
+  older_entries_omitted_due_to_long_history: number
+  chronological_entries: string[]
 }
 
 export type ReviewContext = {
@@ -229,8 +271,49 @@ export type ReviewContext = {
   unresolved_review_threads: ReviewThread[]
   unresolved_bot_threads: ReviewThread[]
   reviews: PullRequestReview[]
+  pr_timeline: ReviewTimelineContext
   previous_bot_findings: ReviewComment[]
   action_items: ReviewActionItem[]
+}
+
+export type ReviewValidationComment = {
+  id: number
+  path?: string | null
+  line?: number | null
+  start_line?: number | null
+  side?: string | null
+  start_side?: string | null
+  in_reply_to_id?: number | null
+  user_login?: string | null
+  body?: string | null
+}
+
+export type ReviewValidationThread = {
+  id: string | null
+  is_resolved: boolean
+  is_outdated: boolean
+  path: string | null
+  line: number | null
+  start_line: number | null
+  side: string | null
+  start_side: string | null
+  top_level_comment_id: number | null
+  top_level_author: string | null
+  top_level_body: string
+}
+
+export type ReviewValidationContext = {
+  generated_at: string
+  run: Pick<ReviewContext["run"], "bot_login">
+  diff: {
+    file: string
+    files: string[]
+    ignored: string[]
+    ranges: ValidCommentRanges
+  }
+  review_threads_available: boolean
+  unresolved_bot_threads: ReviewValidationThread[]
+  review_comments: ReviewValidationComment[]
 }
 
 export type AuditorContext = {
@@ -245,7 +328,6 @@ export type AuditorContext = {
     head_ref: string | null
     base_sha: string | null
     head_sha: string | null
-    url: string | null
     is_draft: boolean | null
     review_decision: string | null
     head_repository: string | null
@@ -257,6 +339,7 @@ export type AuditorContext = {
   }
   review_threads_available: boolean
   review_seems_complete?: boolean
+  pr_timeline: ReviewTimelineContext
   previous_bot_findings: Array<{
     id: number
     path: string | null
@@ -265,7 +348,6 @@ export type AuditorContext = {
     side: string | null
     start_side: string | null
     body: string
-    html_url: string | null
     user_login: string | null
     created_at: string | null
   }>
@@ -280,11 +362,9 @@ export type AuditorContext = {
     top_level_comment_id: number | null
     top_level_author: string | null
     top_level_body: string
-    top_level_html_url: string | null
     latest_author: string | null
     latest_comment_id: number | null
     latest_body: string
-    latest_html_url: string | null
   }>
   action_items: ReviewActionItem[]
 }
@@ -300,7 +380,6 @@ export type ReviewerContext = Omit<AuditorContext, "diff"> & {
     id: number
     user_login: string | null
     body: string
-    html_url: string | null
     author_association: string | null
     created_at: string | null
   }>
@@ -311,7 +390,6 @@ export type ReviewerContext = Omit<AuditorContext, "diff"> & {
     body: string
     submitted_at: string | null
     commit_id: string | null
-    html_url: string | null
   }>
 }
 
@@ -335,11 +413,19 @@ export type GateDeltaMode =
   | "same_head"
   | "ancestor_diff"
   | "rebase_compare"
+  | "current_pr_diff"
   | "unavailable"
 
 export type GateContext = Pick<
   ReviewerContext,
-  "generated_at" | "run" | "pr" | "issue_comments" | "previous_bot_findings" | "unresolved_bot_threads" | "action_items"
+  | "generated_at"
+  | "run"
+  | "pr"
+  | "pr_timeline"
+  | "issue_comments"
+  | "previous_bot_findings"
+  | "unresolved_bot_threads"
+  | "action_items"
 > & {
   diff: {
     files: string[]

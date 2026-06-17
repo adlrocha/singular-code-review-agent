@@ -79,13 +79,16 @@ function createGitHub(diffText, options = {}) {
         return options.issueComments || []
       },
       async listReviewComments() {
-        return []
+        return options.reviewComments || []
       },
       async listReviews() {
         return options.reviews || []
       },
+      async listPullRequestCommits() {
+        return options.commits || []
+      },
       async listReviewThreads() {
-        return { available: true, threads: [] }
+        return { available: options.reviewThreadsAvailable !== false, threads: options.reviewThreads || [] }
       },
       async listIssueCommentReactions() {
         return []
@@ -157,7 +160,85 @@ test("runner executes review, audit, synthesis, validation, and submission in or
   const config = createConfig(workspace)
   const artifacts = new ArtifactStore(config.artifacts)
   const diffText = fs.readFileSync(fixture, "utf8")
-  const github = createGitHub(diffText)
+  const headSha = "47138577abc123"
+  const github = createGitHub(diffText, {
+    commits: [
+      {
+        sha: headSha,
+        html_url: `https://github.com/owner/repo/commit/${headSha}`,
+        author: { login: "entomb" },
+        parents: [{ sha: "base" }],
+        commit: {
+          message: "Add timeout guard\n\nKeep invalid timeouts out of callers.",
+          author: { name: "Joao", date: "2026-06-16T10:00:00Z" },
+          committer: { name: "Joao", date: "2026-06-16T10:00:00Z" }
+        }
+      }
+    ],
+    issueComments: [
+      {
+        id: 9,
+        user: { login: "linear-code[bot]" },
+        body: '<!-- linear-linkback --><p><a href="https://linear.app/we-are-singular/issue/SHE-118">SHE-118</a></p>',
+        html_url: "https://github.com/owner/repo/pull/42#issuecomment-9",
+        author_association: "NONE",
+        created_at: "2026-06-16T09:59:00Z"
+      },
+      {
+        id: 10,
+        user: { login: "entomb" },
+        body: "@singular-code-review can you try again?",
+        html_url: "https://github.com/owner/repo/pull/42#issuecomment-10",
+        author_association: "MEMBER",
+        created_at: "2026-06-16T10:02:00Z"
+      }
+    ],
+    reviews: [botReview(headSha)],
+    reviewThreads: [
+      {
+        id: "thread-1",
+        is_resolved: false,
+        is_outdated: false,
+        path: "src/app.js",
+        line: 2,
+        start_line: null,
+        side: "RIGHT",
+        start_side: null,
+        top_level_comment_id: 100,
+        top_level_author: "singular-code-review[bot]",
+        latest_author: "entomb",
+        latest_comment_id: 101,
+        comments: [
+          {
+            id: 100,
+            node_id: "node-100",
+            user: { login: "singular-code-review[bot]" },
+            body: "Previous finding.",
+            path: "src/app.js",
+            line: 2,
+            start_line: null,
+            side: "RIGHT",
+            start_side: null,
+            created_at: "2026-06-16T10:01:00Z",
+            html_url: "https://github.com/owner/repo/pull/42#discussion_r100"
+          },
+          {
+            id: 101,
+            node_id: "node-101",
+            user: { login: "entomb" },
+            body: "I fixed this in the latest push.",
+            path: "src/app.js",
+            line: 2,
+            start_line: null,
+            side: "RIGHT",
+            start_side: null,
+            created_at: "2026-06-16T10:03:00Z",
+            html_url: "https://github.com/owner/repo/pull/42#discussion_r101"
+          }
+        ]
+      }
+    ]
+  })
   const calls = []
 
   const opencode = {
@@ -230,11 +311,71 @@ test("runner executes review, audit, synthesis, validation, and submission in or
   assert.deepEqual(reviewerContext.diff.ranges["src/app.js"].added, ["2", "4", "6"])
   assert.deepEqual(reviewerContext.diff.ranges["src/new.js"].added, ["1-2"])
   assert.equal(Object.hasOwn(reviewerContext.diff, "ignored_files"), false)
+  assert.doesNotMatch(JSON.stringify(reviewerContext), /https?:\/\/|html_url|<!--|<a/u)
+  assert.equal(reviewerContext.pr_timeline.full_event_file, config.artifacts.timelineFile)
+  assert.equal(reviewerContext.pr_timeline.older_entries_omitted_due_to_long_history, 0)
+  assert.match(
+    reviewerContext.pr_timeline.chronological_entries.join("\n"),
+    /4713857 \| commit \| @entomb \| Add timeout guard/u
+  )
+  assert.match(
+    reviewerContext.pr_timeline.chronological_entries.join("\n"),
+    /issue-10 \| issue_comment \| @entomb \| MEMBER \| @singular-code-review can you try again\?/u
+  )
+  assert.match(
+    reviewerContext.pr_timeline.chronological_entries.join("\n"),
+    /issue-9 \| issue_comment \| @linear-code\[bot\] \| NONE \| SHE-118/u
+  )
+  assert.doesNotMatch(reviewerContext.pr_timeline.chronological_entries.join("\n"), /https:\/\/linear\.app|<a|<!--/u)
+  assert.match(
+    reviewerContext.pr_timeline.chronological_entries.join("\n"),
+    /comment-101 \| thread_comment \| @entomb \| unresolved \| src\/app\.js:2 \| I fixed this/u
+  )
+  const timeline = JSON.parse(fs.readFileSync(config.artifacts.timelineFile, "utf8"))
+  assert.equal(timeline.older_entries_omitted_due_to_long_history, 0)
+  assert.deepEqual(timeline.chronological_entries, reviewerContext.pr_timeline.chronological_entries)
+  assert.doesNotMatch(JSON.stringify(timeline), /https?:\/\/|html_url|<!--|<a/u)
+  assert.deepEqual(
+    timeline.events.map(event => event.kind),
+    ["review", "issue_comment", "commit", "thread_comment", "issue_comment", "thread_comment"]
+  )
+  assert.equal(timeline.events.find(event => event.comment_id === 101).thread_id, "thread-1")
+  const validationContext = JSON.parse(fs.readFileSync(config.artifacts.contextFile, "utf8"))
+  assert.deepEqual(Object.keys(validationContext).sort(), [
+    "diff",
+    "generated_at",
+    "review_comments",
+    "review_threads_available",
+    "run",
+    "unresolved_bot_threads"
+  ])
+  assert.deepEqual(validationContext.diff.files, ["src/app.js", "src/new.js"])
+  assert.deepEqual(validationContext.diff.ranges["src/app.js"].added_lines, [2, 4, 6])
+  assert.equal(validationContext.review_comments.length, 0)
+  assert.deepEqual(validationContext.unresolved_bot_threads, [
+    {
+      id: "thread-1",
+      is_resolved: false,
+      is_outdated: false,
+      path: "src/app.js",
+      line: 2,
+      start_line: null,
+      side: "RIGHT",
+      start_side: null,
+      top_level_comment_id: 100,
+      top_level_author: "singular-code-review[bot]",
+      top_level_body: "Previous finding."
+    }
+  ])
+  assert.doesNotMatch(JSON.stringify(validationContext), /https:\/\/github\.com/u)
+  assert.equal(Object.hasOwn(validationContext, "pr"), false)
+  assert.equal(Object.hasOwn(validationContext, "issue_comments"), false)
   const auditorContext = JSON.parse(fs.readFileSync(config.artifacts.auditorContextFile, "utf8"))
   assert.deepEqual(auditorContext.diff.files, ["src/app.js", "src/new.js"])
   assert.equal(Object.hasOwn(auditorContext, "valid_comment_ranges"), false)
   assert.equal(Object.hasOwn(auditorContext, "review_comments"), false)
   assert.equal(auditorContext.review_seems_complete, false)
+  assert.deepEqual(auditorContext.pr_timeline.chronological_entries, reviewerContext.pr_timeline.chronological_entries)
   assert.deepEqual(github.submitted.reviews, [
     {
       body: "> reviewer · minimax-m3\n\nRequest changes: keep the queued finding.",

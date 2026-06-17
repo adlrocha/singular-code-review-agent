@@ -10,8 +10,16 @@ import {
   type ReviewReplyInput,
   type ReviewSide,
   type ReviewThread,
+  type ReviewValidationComment,
+  type ReviewValidationContext,
+  type ReviewValidationThread,
+  type ValidCommentRanges,
   type ValidatedReviewQueue
 } from "./types.js"
+
+type QueueValidationContext = ReviewContext | ReviewValidationContext
+type QueueReviewComment = ReviewContext["review_comments"][number] | ReviewValidationComment
+type QueueReviewThread = ReviewThread | ReviewValidationThread
 
 /**
  * Creates the canonical queue shape shared by the agent-facing CLI and runner.
@@ -242,8 +250,46 @@ function replyKey(reply: ReviewReply): string {
   return [reply.to, reply.body].join("\0")
 }
 
-function commentFromThread(thread: ReviewThread): ReviewInlineComment | null {
-  const topLevel = thread.comments[0] || null
+function contextRanges(context: QueueValidationContext): ValidCommentRanges {
+  return "valid_comment_ranges" in context ? context.valid_comment_ranges || {} : context.diff?.ranges || {}
+}
+
+function contextReviewComments(context: QueueValidationContext): QueueReviewComment[] {
+  return Array.isArray(context.review_comments) ? context.review_comments : []
+}
+
+function contextUnresolvedBotThreads(context: QueueValidationContext): QueueReviewThread[] {
+  return Array.isArray(context.unresolved_bot_threads) ? context.unresolved_bot_threads : []
+}
+
+function commentUserLogin(comment: QueueReviewComment): string | null {
+  if ("user" in comment) {
+    return comment.user?.login || null
+  }
+  return (comment as ReviewValidationComment).user_login || null
+}
+
+function commentStartLine(comment: QueueReviewComment): number | null | undefined {
+  return comment.start_line || ("startLine" in comment ? comment.startLine : null)
+}
+
+function commentStartSide(comment: QueueReviewComment): string | null | undefined {
+  return comment.start_side || ("startSide" in comment ? comment.startSide : null)
+}
+
+function threadComments(thread: QueueReviewThread) {
+  return "comments" in thread && Array.isArray(thread.comments) ? thread.comments : []
+}
+
+function threadTopLevelBody(thread: QueueReviewThread): string {
+  if ("top_level_body" in thread) {
+    return thread.top_level_body || ""
+  }
+  return threadComments(thread)[0]?.body || ""
+}
+
+function commentFromThread(thread: QueueReviewThread): ReviewInlineComment | null {
+  const topLevel = threadComments(thread)[0] || null
   const pathValue = thread.path || topLevel?.path
   const lineValue = thread.line || topLevel?.line
 
@@ -256,7 +302,7 @@ function commentFromThread(thread: ReviewThread): ReviewInlineComment | null {
     path: pathValue,
     line: Number(lineValue),
     side: normalizeSide(thread.side || topLevel?.side, "side"),
-    body: topLevel?.body || ""
+    body: threadTopLevelBody(thread)
   }
 
   const startLine = thread.start_line || topLevel?.start_line
@@ -273,7 +319,7 @@ function commentFromThread(thread: ReviewThread): ReviewInlineComment | null {
  * Builds exact-match keys for already-posted bot findings so validation can
  * suppress duplicates without guessing about semantically similar comments.
  */
-function existingBotFindingMatches(context: ReviewContext) {
+function existingBotFindingMatches(context: QueueValidationContext) {
   const botLogin = context.run?.bot_login
   const matches = {
     unresolvedBodyKeys: new Set<string>(),
@@ -287,7 +333,7 @@ function existingBotFindingMatches(context: ReviewContext) {
   if (context.review_threads_available) {
     // Prefer unresolved thread state when available. A resolved previous bot
     // finding should not suppress a fresh finding on the same changed line.
-    for (const thread of context.unresolved_bot_threads || []) {
+    for (const thread of contextUnresolvedBotThreads(context)) {
       const comment = commentFromThread(thread)
       if (!comment) {
         continue
@@ -299,8 +345,8 @@ function existingBotFindingMatches(context: ReviewContext) {
 
   // REST fallback has no reliable thread resolution state, so it is intentionally
   // narrower: only exact body/location matches to previous top-level bot comments.
-  for (const comment of context.review_comments || []) {
-    if (comment.user?.login !== botLogin || comment.in_reply_to_id) {
+  for (const comment of contextReviewComments(context)) {
+    if (commentUserLogin(comment) !== botLogin || comment.in_reply_to_id) {
       continue
     }
 
@@ -311,8 +357,8 @@ function existingBotFindingMatches(context: ReviewContext) {
       side: normalizeSide(comment.side, "side"),
       body: comment.body || ""
     }
-    const startLine = comment.start_line || comment.startLine
-    const startSide = normalizeSide(comment.start_side || comment.startSide || comparable.side, "start-side")
+    const startLine = commentStartLine(comment)
+    const startSide = normalizeSide(commentStartSide(comment) || comparable.side, "start-side")
     if (startLine && (Number(startLine) !== Number(comment.line) || startSide !== comparable.side)) {
       comparable.start_line = Number(startLine)
       comparable.start_side = startSide
@@ -328,10 +374,10 @@ function existingBotFindingMatches(context: ReviewContext) {
  * Validates one inline comment against the current PR diff. RIGHT comments must
  * target added lines; LEFT comments must target deleted lines.
  */
-export function validateInlineComment(comment: ReviewInlineCommentInput, context: ReviewContext) {
+export function validateInlineComment(comment: ReviewInlineCommentInput, context: QueueValidationContext) {
   try {
     const normalized = normalizeInlineComment(comment)
-    const ranges = context.valid_comment_ranges?.[normalized.path]
+    const ranges = contextRanges(context)[normalized.path]
     if (!ranges) {
       return { ok: false as const, reason: "path is not present in the PR diff" }
     }
@@ -372,10 +418,10 @@ export function validateInlineComment(comment: ReviewInlineCommentInput, context
 /**
  * Validates that a queued reply targets a top-level review comment on this PR.
  */
-export function validateReply(reply: ReviewReplyInput, context: ReviewContext) {
+export function validateReply(reply: ReviewReplyInput, context: QueueValidationContext) {
   try {
     const normalized = normalizeReply(reply)
-    const comments = Array.isArray(context.review_comments) ? context.review_comments : []
+    const comments = contextReviewComments(context)
     const target = comments.find(comment => Number(comment.id) === normalized.to)
     if (!target) {
       return { ok: false as const, reason: "reply target is not a review comment on this PR" }
@@ -396,7 +442,7 @@ export function validateReply(reply: ReviewReplyInput, context: ReviewContext) {
  * may drop exact duplicates and invalid targets, but it intentionally keeps
  * distinct same-line findings for the audit phase and reviewer judgement.
  */
-export function validateQueue(queue: ReviewQueue, context: ReviewContext): ValidatedReviewQueue {
+export function validateQueue(queue: ReviewQueue, context: QueueValidationContext): ValidatedReviewQueue {
   const inlineComments: ReviewInlineComment[] = []
   const replies: ReviewReply[] = []
   const dropped: DroppedQueueItem[] = []

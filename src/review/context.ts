@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
-import { readJsonFile } from "../lib/json.js"
+import { readJsonFile, writeJsonFile } from "../lib/json.js"
 import { type GitHubClient } from "../clients/github.js"
 import { filterReviewDiff, parseUnifiedDiff, validCommentRangesFromDiff } from "./diff.js"
 import {
@@ -10,10 +10,13 @@ import {
   type CompactLineRanges,
   type IssueComment,
   type ModelCommentRanges,
+  type PullRequestCommit,
   type PullRequestReview,
   type ReviewActionItem,
   type ReviewComment,
   type ReviewContext,
+  type ReviewTimelineEvent,
+  type ReviewValidationContext,
   type ReviewerContext,
   type ReviewThread,
   type ReviewTrigger,
@@ -25,6 +28,7 @@ type BuildReviewContextOptions = {
   repository: string
   prNumber: number
   diffFile: string
+  timelineFile?: string
   eventName?: string | null
   eventPath?: string | null
   actor?: string | null
@@ -56,6 +60,11 @@ export function createEmptyReviewContext(overrides: Partial<ReviewContext> = {})
     unresolved_review_threads: [],
     unresolved_bot_threads: [],
     reviews: [],
+    pr_timeline: {
+      full_event_file: "",
+      older_entries_omitted_due_to_long_history: 0,
+      chronological_entries: []
+    },
     previous_bot_findings: [],
     action_items: []
   }
@@ -70,6 +79,10 @@ export function createEmptyReviewContext(overrides: Partial<ReviewContext> = {})
     diff: {
       ...base.diff,
       ...overrides.diff
+    },
+    pr_timeline: {
+      ...base.pr_timeline,
+      ...(overrides.pr_timeline || {})
     }
   }
 }
@@ -98,6 +111,182 @@ function booleanValue(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null
 }
 
+const TIMELINE_SUMMARY_CHARS = 140
+const TIMELINE_CONTEXT_ENTRIES = 60
+const MODEL_TEXT_CHARS = 1600
+
+function compactText(value: unknown, max = TIMELINE_SUMMARY_CHARS): string {
+  const text = String(value || "")
+    .replace(/<!--[\s\S]*?-->/gu, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/gu, "$1")
+    .replace(/<a\b[^>]*>(.*?)<\/a>/giu, "$1")
+    .replace(/https?:\/\/\S+/giu, " ")
+    .replace(/<[^>]+>/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+  if (text.length <= max) {
+    return text
+  }
+  return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}...`
+}
+
+function shortSha(value: string | null | undefined): string | null {
+  return value ? value.slice(0, 7) : null
+}
+
+function actorLogin(user: { login?: string | null } | null | undefined): string | null {
+  return user?.login || null
+}
+
+function atMillis(value: string | null | undefined): number | null {
+  if (!value) {
+    return null
+  }
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function location(
+  path: string | null | undefined,
+  start: number | null | undefined,
+  end: number | null | undefined
+): string | null {
+  if (!path) {
+    return null
+  }
+  if (start && end && start !== end) {
+    return `${path}:${start}-${end}`
+  }
+  const line = end || start
+  return line ? `${path}:${line}` : path
+}
+
+function timelineEntry(event: ReviewTimelineEvent): string {
+  const fields = [
+    event.at || "unknown-time",
+    event.ref || event.id,
+    event.kind,
+    event.actor ? `@${event.actor}` : null,
+    event.state || null,
+    event.location || null,
+    event.summary
+  ].filter((value): value is string => Boolean(value))
+  return fields.join(" | ")
+}
+
+function sortTimelineEvents(events: ReviewTimelineEvent[]): ReviewTimelineEvent[] {
+  return events.slice().sort((left, right) => {
+    const leftTime = atMillis(left.at) ?? Number.MAX_SAFE_INTEGER
+    const rightTime = atMillis(right.at) ?? Number.MAX_SAFE_INTEGER
+    if (leftTime !== rightTime) {
+      return leftTime - rightTime
+    }
+    return left.id.localeCompare(right.id)
+  })
+}
+
+function buildReviewTimeline(options: {
+  commits: PullRequestCommit[]
+  issueComments: IssueComment[]
+  reviewComments: ReviewComment[]
+  reviews: PullRequestReview[]
+  reviewThreads: ReviewThread[]
+  reviewThreadsAvailable: boolean
+}): {
+  events: ReviewTimelineEvent[]
+  older_entries_omitted_due_to_long_history: number
+  chronological_entries: string[]
+} {
+  const events: ReviewTimelineEvent[] = []
+
+  for (const commit of options.commits || []) {
+    const sha = commit.sha || null
+    const title = compactText(String(commit.commit?.message || "").split(/\r?\n/u)[0] || sha || "commit")
+    const isMerge = Boolean((commit.parents || []).length > 1 || /^merge\b/iu.test(title))
+    events.push({
+      id: `commit:${sha || events.length}`,
+      kind: isMerge ? "merge" : "commit",
+      at: commit.commit?.committer?.date || commit.commit?.author?.date || null,
+      actor: actorLogin(commit.author) || actorLogin(commit.committer),
+      ref: shortSha(sha),
+      summary: title,
+      commit_id: sha
+    })
+  }
+
+  for (const review of options.reviews || []) {
+    const id = numberValue(review.id)
+    events.push({
+      id: `review:${id ?? events.length}`,
+      kind: "review",
+      at: stringValue(review.submitted_at) || stringValue(review.submittedAt),
+      actor: actorLogin(review.user),
+      ref: id ? `review-${id}` : shortSha(review.commit_id || review.commitId),
+      state: stringValue(review.state),
+      summary: compactText(review.body || "(no review body)"),
+      commit_id: stringValue(review.commit_id) || stringValue(review.commitId),
+      review_id: id
+    })
+  }
+
+  for (const comment of options.issueComments || []) {
+    events.push({
+      id: `issue-comment:${comment.id}`,
+      kind: "issue_comment",
+      at: comment.created_at || comment.updated_at || null,
+      actor: actorLogin(comment.user),
+      ref: `issue-${comment.id}`,
+      state: comment.author_association || null,
+      summary: compactText(comment.body || "(empty comment)"),
+      comment_id: comment.id
+    })
+  }
+
+  if (options.reviewThreadsAvailable) {
+    for (const thread of options.reviewThreads || []) {
+      const threadState = thread.is_resolved ? "resolved" : thread.is_outdated ? "outdated" : "unresolved"
+      for (const comment of thread.comments || []) {
+        events.push({
+          id: `thread-comment:${thread.id || "unknown"}:${comment.id ?? events.length}`,
+          kind: "thread_comment",
+          at: comment.created_at,
+          actor: actorLogin(comment.user),
+          ref: comment.id ? `comment-${comment.id}` : thread.id,
+          state: threadState,
+          location: location(comment.path || thread.path, comment.start_line, comment.line),
+          summary: compactText(comment.body || "(empty thread comment)"),
+          comment_id: comment.id,
+          thread_id: thread.id
+        })
+      }
+    }
+  } else {
+    for (const comment of options.reviewComments || []) {
+      events.push({
+        id: `review-comment:${comment.id}`,
+        kind: "review_comment",
+        at: comment.created_at || comment.updated_at || null,
+        actor: actorLogin(comment.user),
+        ref: `comment-${comment.id}`,
+        state: comment.in_reply_to_id ? "reply" : "comment",
+        location: location(comment.path, comment.start_line || comment.startLine, comment.line),
+        summary: compactText(comment.body || "(empty review comment)"),
+        review_id: comment.pull_request_review_id || null,
+        comment_id: comment.id
+      })
+    }
+  }
+
+  const sorted = sortTimelineEvents(events)
+  const olderEntriesOmitted = Math.max(0, sorted.length - TIMELINE_CONTEXT_ENTRIES)
+  const visible = sorted.slice(-TIMELINE_CONTEXT_ENTRIES)
+  return {
+    events: sorted,
+    older_entries_omitted_due_to_long_history: olderEntriesOmitted,
+    chronological_entries: visible.map(timelineEntry)
+  }
+}
+
 /**
  * Reads GitHub Actions event metadata into the narrow trigger shape consumed by
  * prompts and review tools.
@@ -118,8 +307,7 @@ export function readEventContext(options: {
       ? {
           id: numberValue(comment.id) as number,
           user: stringValue(commentUser.login),
-          body: stringValue(comment.body) || "",
-          html_url: stringValue(comment.html_url)
+          body: compactText(comment.body, MODEL_TEXT_CHARS)
         }
       : null
 
@@ -150,15 +338,6 @@ function containsMention(body: unknown, botLogin: string, command: string): bool
   return needles.some(needle => text.includes(needle))
 }
 
-function timestampMs(value: string | null | undefined): number | null {
-  if (!value) {
-    return null
-  }
-
-  const parsed = Date.parse(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
 function latestBotActivityMs(options: {
   issueComments: IssueComment[]
   reviews: PullRequestReview[]
@@ -166,7 +345,7 @@ function latestBotActivityMs(options: {
 }): number | null {
   let latest: number | null = null
   const record = (value: string | null | undefined) => {
-    const parsed = timestampMs(value)
+    const parsed = atMillis(value)
     if (parsed !== null && (latest === null || parsed > latest)) {
       latest = parsed
     }
@@ -192,7 +371,7 @@ function commentIsAfterLatestBotActivity(comment: IssueComment, latestBotActivit
     return true
   }
 
-  const commentTime = timestampMs(comment.created_at || comment.updated_at)
+  const commentTime = atMillis(comment.created_at || comment.updated_at)
   return commentTime === null || commentTime > latestBotActivity
 }
 
@@ -222,7 +401,7 @@ export function buildActionItems(options: {
       id: `issue-comment:${options.trigger.trigger_comment.id}`,
       kind: "trigger_request",
       actor: options.trigger.trigger_comment.user,
-      body: options.trigger.trigger_comment.body,
+      body: compactText(options.trigger.trigger_comment.body, MODEL_TEXT_CHARS),
       comment_id: options.trigger.trigger_comment.id
     })
   }
@@ -241,7 +420,7 @@ export function buildActionItems(options: {
       id: `issue-comment:${comment.id}`,
       kind: "mentioned",
       actor: comment.user?.login || null,
-      body: comment.body || "",
+      body: compactText(comment.body, MODEL_TEXT_CHARS),
       comment_id: comment.id,
       created_at: comment.created_at || null
     })
@@ -265,7 +444,7 @@ export function buildActionItems(options: {
           id: `review-thread:${thread.id}`,
           kind: "reply_requested",
           actor: thread.latest_author,
-          body: thread.comments[thread.comments.length - 1]?.body || "",
+          body: compactText(thread.comments[thread.comments.length - 1]?.body, MODEL_TEXT_CHARS),
           reply_to_comment_id: Number(thread.top_level_comment_id),
           latest_reply_id: thread.latest_comment_id,
           review_thread_id: thread.id,
@@ -305,7 +484,7 @@ export function buildActionItems(options: {
         id: `review-comment:${parentId}`,
         kind: "reply_requested",
         actor: latest.user.login,
-        body: latest.body || "",
+        body: compactText(latest.body, MODEL_TEXT_CHARS),
         reply_to_comment_id: Number(parentId),
         latest_reply_id: latest.id
       })
@@ -326,13 +505,12 @@ function compactPullRequest(value: unknown): AuditorContext["pr"] {
   return {
     number: numberValue(record.number),
     title: stringValue(record.title),
-    body: stringValue(record.body),
+    body: stringValue(record.body) ? compactText(record.body, MODEL_TEXT_CHARS) : null,
     author: stringValue(author.login) || stringValue(user.login),
     base_ref: stringValue(record.baseRefName) || stringValue(base.ref),
     head_ref: stringValue(record.headRefName) || stringValue(head.ref),
     base_sha: stringValue(record.baseRefOid) || stringValue(base.sha),
     head_sha: stringValue(record.headRefOid) || stringValue(head.sha),
-    url: stringValue(record.html_url) || stringValue(record.url),
     is_draft: booleanValue(record.isDraft) ?? booleanValue(record.draft),
     review_decision: stringValue(record.reviewDecision),
     head_repository: stringValue(headRepo.full_name)
@@ -347,8 +525,7 @@ function compactReviewComment(comment: ReviewComment): AuditorContext["previous_
     start_line: comment.start_line || comment.startLine || null,
     side: comment.side || null,
     start_side: comment.start_side || comment.startSide || null,
-    body: comment.body || "",
-    html_url: comment.html_url || null,
+    body: compactText(comment.body, MODEL_TEXT_CHARS),
     user_login: comment.user?.login || null,
     created_at: comment.created_at || null
   }
@@ -368,12 +545,42 @@ function compactReviewThread(thread: ReviewThread): AuditorContext["unresolved_b
     start_side: thread.start_side || topLevel?.start_side || null,
     top_level_comment_id: thread.top_level_comment_id,
     top_level_author: thread.top_level_author,
-    top_level_body: topLevel?.body || "",
-    top_level_html_url: topLevel?.html_url || null,
+    top_level_body: compactText(topLevel?.body, MODEL_TEXT_CHARS),
     latest_author: thread.latest_author,
     latest_comment_id: thread.latest_comment_id,
-    latest_body: latest?.body || "",
-    latest_html_url: latest?.html_url || null
+    latest_body: compactText(latest?.body, MODEL_TEXT_CHARS)
+  }
+}
+
+function validationReviewComment(comment: ReviewComment): ReviewValidationContext["review_comments"][number] {
+  return {
+    id: comment.id,
+    path: comment.path || null,
+    line: comment.line || null,
+    start_line: comment.start_line || comment.startLine || null,
+    side: comment.side || null,
+    start_side: comment.start_side || comment.startSide || null,
+    in_reply_to_id: comment.in_reply_to_id || null,
+    user_login: comment.user?.login || null,
+    body: comment.body || ""
+  }
+}
+
+function validationReviewThread(thread: ReviewThread): ReviewValidationContext["unresolved_bot_threads"][number] {
+  const topLevel = thread.comments[0] || null
+
+  return {
+    id: thread.id,
+    is_resolved: thread.is_resolved,
+    is_outdated: thread.is_outdated,
+    path: thread.path || topLevel?.path || null,
+    line: thread.line || topLevel?.line || null,
+    start_line: thread.start_line || topLevel?.start_line || null,
+    side: thread.side || topLevel?.side || null,
+    start_side: thread.start_side || topLevel?.start_side || null,
+    top_level_comment_id: thread.top_level_comment_id,
+    top_level_author: thread.top_level_author,
+    top_level_body: topLevel?.body || ""
   }
 }
 
@@ -425,8 +632,7 @@ function compactIssueComment(comment: IssueComment): ReviewerContext["issue_comm
   return {
     id: comment.id,
     user_login: comment.user?.login || null,
-    body: comment.body || "",
-    html_url: comment.html_url || null,
+    body: compactText(comment.body, MODEL_TEXT_CHARS),
     author_association: comment.author_association || null,
     created_at: comment.created_at || null
   }
@@ -440,10 +646,9 @@ function compactReview(value: unknown): ReviewerContext["recent_reviews"][number
     id: numberValue(record.id),
     user_login: stringValue(user.login),
     state: stringValue(record.state),
-    body: stringValue(record.body) || "",
+    body: compactText(record.body, MODEL_TEXT_CHARS),
     submitted_at: stringValue(record.submitted_at) || stringValue(record.submittedAt),
-    commit_id: stringValue(record.commit_id) || stringValue(record.commitId),
-    html_url: stringValue(record.html_url) || stringValue(record.url)
+    commit_id: stringValue(record.commit_id) || stringValue(record.commitId)
   }
 }
 
@@ -463,9 +668,33 @@ export function buildAuditorContext(context: ReviewContext): AuditorContext {
       ignored_files: Array.isArray(context.diff.ignored_files) ? context.diff.ignored_files : []
     },
     review_threads_available: context.review_threads_available,
+    pr_timeline: context.pr_timeline,
     previous_bot_findings: (context.previous_bot_findings || []).map(compactReviewComment),
     unresolved_bot_threads: (context.unresolved_bot_threads || []).map(compactReviewThread),
     action_items: context.action_items || []
+  }
+}
+
+/**
+ * Builds the tool-only validation context consumed by `review_comments`.
+ * It intentionally excludes raw GitHub payloads, URLs, reactions, labels, and
+ * other fields that are noisy or irrelevant to deterministic queue checks.
+ */
+export function buildValidationContext(context: ReviewContext): ReviewValidationContext {
+  return {
+    generated_at: context.generated_at,
+    run: {
+      bot_login: context.run.bot_login
+    },
+    diff: {
+      file: context.diff.file,
+      files: Array.isArray(context.diff.files) ? context.diff.files : [],
+      ignored: Array.isArray(context.diff.ignored_files) ? context.diff.ignored_files : [],
+      ranges: context.valid_comment_ranges || {}
+    },
+    review_threads_available: context.review_threads_available,
+    unresolved_bot_threads: (context.unresolved_bot_threads || []).map(validationReviewThread),
+    review_comments: (context.review_comments || []).map(validationReviewComment)
   }
 }
 
@@ -513,19 +742,38 @@ export async function buildReviewContext(options: BuildReviewContextOptions): Pr
 
   // Fetch independent GitHub surfaces in parallel so the gathering phase is
   // bounded by the slowest API call rather than their sum.
-  const [pr, issueComments, reviewComments, reviews, reviewThreadsResult] = await Promise.all([
+  const [pr, issueComments, reviewComments, reviews, commits, reviewThreadsResult] = await Promise.all([
     options.github.getPullRequest(options.prNumber),
     options.github.listIssueComments(options.prNumber),
     options.github.listReviewComments(options.prNumber),
     options.github.listReviews(options.prNumber),
+    options.github.listPullRequestCommits(options.prNumber),
     options.github.listReviewThreads(options.prNumber)
   ])
   const reviewThreads = reviewThreadsResult.threads
   const unresolvedReviewThreads = reviewThreads.filter(thread => !thread.is_resolved)
   const unresolvedBotThreads = unresolvedReviewThreads.filter(thread => thread.top_level_author === botLogin)
+  const timeline = buildReviewTimeline({
+    commits,
+    issueComments,
+    reviewComments,
+    reviews,
+    reviewThreads,
+    reviewThreadsAvailable: reviewThreadsResult.available
+  })
+  const timelineFile = options.timelineFile || ""
+  const generatedAt = new Date().toISOString()
+  if (timelineFile) {
+    writeJsonFile(timelineFile, {
+      generated_at: generatedAt,
+      older_entries_omitted_due_to_long_history: timeline.older_entries_omitted_due_to_long_history,
+      chronological_entries: timeline.chronological_entries,
+      events: timeline.events
+    })
+  }
 
   return {
-    generated_at: new Date().toISOString(),
+    generated_at: generatedAt,
     run: {
       ...trigger,
       command,
@@ -545,6 +793,11 @@ export async function buildReviewContext(options: BuildReviewContextOptions): Pr
     unresolved_review_threads: unresolvedReviewThreads,
     unresolved_bot_threads: unresolvedBotThreads,
     reviews,
+    pr_timeline: {
+      full_event_file: timelineFile,
+      older_entries_omitted_due_to_long_history: timeline.older_entries_omitted_due_to_long_history,
+      chronological_entries: timeline.chronological_entries
+    },
     previous_bot_findings: reviewComments.filter(
       comment => comment.user?.login === botLogin && !comment.in_reply_to_id
     ),

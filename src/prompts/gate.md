@@ -2,6 +2,8 @@ Decide whether Singular Code Review should run a full pull request review.
 
 Use the compact gate context at `{{contextFile}}` and the delta file at `{{deltaFile}}`.
 
+Use `pr_timeline.chronological_entries` in the gate context to understand chronology: which comments are stale, whether a human instruction came after the latest bot activity, and whether pushes are merge/rebase churn or meaningful PR work. Use `pr_timeline.full_event_file` if an id or SHA needs inspection.
+
 Output contract:
 
 - Output exactly one JSON object.

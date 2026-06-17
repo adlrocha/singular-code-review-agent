@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import { buildReviewerContext } from "./context.js"
+import { filterReviewDiff, parseUnifiedDiff } from "./diff.js"
 import { type GateContext, type GateDecision, type GateDeltaMode, type ReviewContext } from "./types.js"
 
 const MAX_GATE_DELTA_CHARS = 80_000
@@ -135,10 +136,11 @@ function patchId(workspace: string, patch: string): string | null {
 
 function ancestorDelta(workspace: string, lastCommit: string, headCommit: string): GateDelta | null {
   const range = `${lastCommit}..${headCommit}`
-  const text = gitText(workspace, ["diff", "--find-renames", range])
-  if (text === null) {
+  const rawText = gitText(workspace, ["diff", "--find-renames", range])
+  if (rawText === null) {
     return null
   }
+  const text = filterReviewDiff(rawText).text
 
   return {
     mode: "ancestor_diff",
@@ -173,12 +175,14 @@ function rebaseDelta(
 
   const oldRange = `${oldBase}..${lastCommit}`
   const currentRange = `${currentBase}..${headCommit}`
-  const oldPatch = gitText(workspace, ["diff", "--find-renames", oldRange])
-  const currentPatch = gitText(workspace, ["diff", "--find-renames", currentRange])
-  if (oldPatch === null || currentPatch === null) {
+  const rawOldPatch = gitText(workspace, ["diff", "--find-renames", oldRange])
+  const rawCurrentPatch = gitText(workspace, ["diff", "--find-renames", currentRange])
+  if (rawOldPatch === null || rawCurrentPatch === null) {
     return null
   }
 
+  const oldPatch = filterReviewDiff(rawOldPatch).text
+  const currentPatch = filterReviewDiff(rawCurrentPatch).text
   const oldPatchId = patchId(workspace, oldPatch)
   const currentPatchId = patchId(workspace, currentPatch)
   const rangeDiff = gitText(workspace, ["range-diff", oldRange, currentRange]) || ""
@@ -282,6 +286,33 @@ function buildDelta(options: {
   return delta
 }
 
+function currentPrDiffDelta(options: { previous: GateDelta; workspace: string; diffText: string }): GateDelta | null {
+  const text = options.diffText.trimEnd()
+  if (!text) {
+    return null
+  }
+
+  const header = [
+    "Delta mode: current_pr_diff",
+    `Historical delta mode ${options.previous.mode} was ${options.previous.text.length} characters, above the ${MAX_GATE_DELTA_CHARS} character gate limit.`,
+    "Using the current filtered pull request diff as compact gate context.",
+    ""
+  ].join("\n")
+
+  return {
+    mode: "current_pr_diff",
+    file: null,
+    summary: "Historical delta from the last bot review was too large; using the current filtered PR diff.",
+    last_reviewed_commit: options.previous.last_reviewed_commit,
+    current_head: options.previous.current_head,
+    changed_files: parseUnifiedDiff(text).files.map(file => file.path),
+    old_patch_id: null,
+    current_patch_id: patchId(options.workspace, text),
+    patch_ids_match: null,
+    text: `${header}\n${text}\n`
+  }
+}
+
 export function buildGateContext(options: {
   context: ReviewContext
   delta: GateDelta
@@ -301,6 +332,7 @@ export function buildGateContext(options: {
       current_hash: diffHash(options.diffText)
     },
     issue_comments: reviewerContext.issue_comments,
+    pr_timeline: reviewerContext.pr_timeline,
     recent_bot_reviews: recentBotReviews,
     last_bot_review: recentBotReviews.find(review => review.commit_id === options.delta.last_reviewed_commit) || null,
     previous_bot_findings: reviewerContext.previous_bot_findings,
@@ -365,6 +397,24 @@ export function prepareGate(options: {
   }
 
   if (delta.text.length > MAX_GATE_DELTA_CHARS) {
+    const fallbackDelta = currentPrDiffDelta({
+      previous: delta,
+      workspace: options.workspace,
+      diffText: options.diffText
+    })
+    if (fallbackDelta && fallbackDelta.text.length <= MAX_GATE_DELTA_CHARS) {
+      return {
+        action: "run-gate",
+        context: buildGateContext({
+          context: options.context,
+          delta: fallbackDelta,
+          diffText: options.diffText,
+          botLogin: options.botLogin
+        }),
+        deltaText: fallbackDelta.text
+      }
+    }
+
     if (reason === "synchronize") {
       return { action: "run-review", reason: "delta is too large for the gate" }
     }

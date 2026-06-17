@@ -167,17 +167,17 @@ repositories that accept arbitrary fork PRs, keep this workflow on the normal
 - `review_extract` writes the post-run transcript, final comments JSON, gate
   issue-comment outcomes, and OpenCode telemetry stats used by GitHub summaries
   and eval capture.
-- `review_context` prints the compact review model context by default. The full
-  `review_validation_context.json` artifact remains available for validation and local
-  troubleshooting with `review_context --full`.
+- `review_context` prints the compact review model context by default.
+  `review_context --full` prints the deterministic validation context used by
+  `review_comments`, without raw GitHub REST payload noise.
 - `review_model_context.json` is the compact context attached to the reviewer. It
   strips raw GitHub REST payload fields and compresses commentable line arrays
   into compact `"line"` and `"start-end"` ranges so the model sees only
   review-relevant context.
 - `gate_model_context.json`, `gate_delta.diff`, and `gate_result.json` are gate
   artifacts used by live synchronize or mention triggers.
-- `audit_model_context.json` is a compact runtime artifact derived from the
-  full context for audit and synthesis prompts.
+- `audit_model_context.json` is a compact runtime artifact for audit and
+  synthesis prompts.
 - `review_comments` is the staging interface used by OpenCode and the
   runner for comments, suggestions, multiline findings, replies, listing, and
   status checks.

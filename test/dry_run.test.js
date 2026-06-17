@@ -41,6 +41,9 @@ test("dry-run GitHub client writes payload and replies to artifacts instead of d
     async listReviews() {
       return []
     },
+    async listPullRequestCommits() {
+      return []
+    },
     async listReviewThreads() {
       return { available: true, threads: [] }
     },

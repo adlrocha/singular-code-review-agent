@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 
 import { main as reviewCommentsMain } from "../dist/cli/review-comments.js"
 import { applyReviewBanner, buildReviewPayload } from "../dist/review/body.js"
+import { buildValidationContext } from "../dist/review/context.js"
 import { filterReviewDiff, parseUnifiedDiff, validCommentRangesFromDiff } from "../dist/review/diff.js"
 import {
   addInlineComment,
@@ -155,7 +156,7 @@ test("review_comments rejects invalid targets before mutating the queue", async 
   const queueFile = tempFile("queue.json")
   const contextFile = tempFile("context.json")
   const diffText = fs.readFileSync(fixture, "utf8")
-  fs.writeFileSync(contextFile, `${JSON.stringify(context(diffText), null, 2)}\n`)
+  fs.writeFileSync(contextFile, `${JSON.stringify(buildValidationContext(context(diffText)), null, 2)}\n`)
 
   await assert.rejects(
     reviewCommentsMain(

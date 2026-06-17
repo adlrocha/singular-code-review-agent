@@ -7,7 +7,7 @@ import { type ArtifactPaths, type ArtifactStore } from "../lib/artifacts.js"
 import { type Logger } from "../lib/logger.js"
 import { buildAuditPrompt, buildGatePrompt, buildReviewPrompt, buildSynthesisPrompt } from "../prompts/prompts.js"
 import { applyReviewBanner, buildReviewPayload, enforceReviewBodyLimit } from "./body.js"
-import { buildAuditorContext, buildReviewContext, buildReviewerContext } from "./context.js"
+import { buildAuditorContext, buildReviewContext, buildReviewerContext, buildValidationContext } from "./context.js"
 import { parseGateDecision, prepareGate } from "./gate.js"
 import { clearQueue, loadQueue, persistValidation, setConclusion, validateQueue } from "./queue.js"
 import { type GateContext, type GateDecision, type ReviewContext, type ValidatedReviewQueue } from "./types.js"
@@ -164,13 +164,14 @@ async function runGatheringPhase(state: ReviewWorkflowState): Promise<ReviewCont
     repository: config.repository,
     prNumber: config.prNumber,
     diffFile: paths.diffFile,
+    timelineFile: paths.timelineFile,
     eventName: config.eventName,
     eventPath: config.eventPath,
     actor: config.actor,
     botLogin: config.botLogin
   })
 
-  artifacts.writeJson(paths.contextFile, context)
+  artifacts.writeJson(paths.contextFile, buildValidationContext(context))
   artifacts.writeJson(paths.reviewerContextFile, buildReviewerContext(context))
   artifacts.writeJson(paths.auditorContextFile, buildAuditorContext(context))
   return context

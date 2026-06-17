@@ -2,6 +2,8 @@ Write the final GitHub pull request review body for Singular Code Review.
 
 Use the reviewer output at `{{reviewerOutputFile}}`, the final validated review queue at `{{validatedFile}}`, and the compact auditor context at `{{auditorContextFile}}`. The runner attaches all three files when supported.
 
+Use `pr_timeline.chronological_entries` in the auditor context for PR chronology, especially when deciding whether a trigger comment is stale or whether an incomplete review caveat is warranted. The timeline is context, not evidence by itself; use the reviewer output and validated queue for final claims.
+
 Output contract:
 
 - Write only the final review body text to stdout.

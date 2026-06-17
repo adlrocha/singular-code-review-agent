@@ -3,8 +3,13 @@ import { createGitHubClient } from "../clients/github.js"
 import { buildArtifactPaths, resolveWorkspace } from "../config/paths.js"
 import { runCliMain } from "../lib/cli-main.js"
 import { readJsonFile, writeJsonFile } from "../lib/json.js"
-import { buildReviewerContext, buildReviewContext, createEmptyReviewContext } from "../review/context.js"
-import { type ReviewContext, type ReviewerContext } from "../review/types.js"
+import {
+  buildReviewerContext,
+  buildReviewContext,
+  buildValidationContext,
+  createEmptyReviewContext
+} from "../review/context.js"
+import { type ReviewerContext, type ReviewValidationContext } from "../review/types.js"
 
 type ParsedArgs = Record<string, string | boolean | undefined>
 
@@ -63,14 +68,16 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
       repository,
       prNumber,
       diffFile,
+      timelineFile: defaults.timelineFile,
       eventName: env.GITHUB_EVENT_NAME || null,
       eventPath: env.GITHUB_EVENT_PATH || null,
       actor: env.GITHUB_ACTOR || null,
       botLogin: env.BOT_LOGIN
     })
-    writeJsonFile(defaults.contextFile, context)
+    const validationContext = buildValidationContext(context)
+    writeJsonFile(defaults.contextFile, validationContext)
     writeJsonFile(defaults.reviewerContextFile, buildReviewerContext(context))
-    const rendered = options.full ? context : buildReviewerContext(context)
+    const rendered = options.full ? validationContext : buildReviewerContext(context)
     if (typeof options.output === "string") {
       writeJsonFile(output, rendered)
     }
@@ -80,7 +87,7 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
 
   printJson(
     options.full
-      ? readJsonFile<ReviewContext>(output, createEmptyReviewContext())
+      ? readJsonFile<ReviewValidationContext>(output, buildValidationContext(createEmptyReviewContext()))
       : readJsonFile<ReviewerContext>(output, buildReviewerContext(createEmptyReviewContext()))
   )
 }

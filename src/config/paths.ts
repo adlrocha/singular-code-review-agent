@@ -57,6 +57,7 @@ export function buildArtifactPaths(env: NodeJS.ProcessEnv, workspace: string, ru
     gateResultFile: env.GATE_RESULT_FILE || join(resolvedRuntimeDir, "gate_result.json"),
     reviewerContextFile: env.REVIEW_MODEL_CONTEXT_FILE || join(resolvedRuntimeDir, "review_model_context.json"),
     auditorContextFile: env.AUDIT_MODEL_CONTEXT_FILE || join(resolvedRuntimeDir, "audit_model_context.json"),
+    timelineFile: env.REVIEW_TIMELINE_FILE || join(resolvedRuntimeDir, "pr_timeline.json"),
     diffFile: env.REVIEW_DIFF_FILE || join(resolvedRuntimeDir, "pr.diff"),
     validatedFile: env.REVIEW_VALIDATED_FILE || join(resolvedRuntimeDir, "review_validated.json"),
     payloadFile: env.REVIEW_PAYLOAD_FILE || join(resolvedRuntimeDir, "review_payload.json"),

@@ -168,6 +168,36 @@ test("synchronize after an ancestor commit sends the commit delta to the gate", 
   assert.match(result.deltaText, /value = 2/u)
 })
 
+test("large ancestor deltas fall back to the current PR diff for the gate", () => {
+  const { repo, reviewed, defaultBranch } = createRepo()
+  git(repo, ["checkout", defaultBranch])
+  write(repo, "fixtures/large.json", `{\n  "payload": "${"x".repeat(100_000)}"\n}\n`)
+  const newBase = commit(repo, "main large fixture")
+  git(repo, ["checkout", "feature"])
+  git(repo, ["merge", "--no-edit", defaultBranch])
+  const head = git(repo, ["rev-parse", "HEAD"])
+  const context = reviewContext({
+    reason: "synchronize",
+    base: newBase,
+    head,
+    reviews: [botReview(reviewed)]
+  })
+  const currentPrDiff = git(repo, ["diff", `${newBase}..${head}`])
+  const result = prepareGate({
+    context,
+    workspace: repo,
+    diffText: currentPrDiff,
+    botLogin
+  })
+
+  assert.equal(result.action, "run-gate")
+  assert.equal(result.context.delta.mode, "current_pr_diff")
+  assert.deepEqual(result.context.delta.changed_files, ["src/app.js"])
+  assert.match(result.deltaText, /Delta mode: current_pr_diff/u)
+  assert.match(result.deltaText, /src\/app.js/u)
+  assert.doesNotMatch(result.deltaText, /fixtures\/large.json/u)
+})
+
 test("rebase-equivalent force push sends range comparison to the gate", () => {
   const { repo, reviewed, defaultBranch } = createRepo()
   git(repo, ["checkout", defaultBranch])

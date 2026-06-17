@@ -11,6 +11,7 @@ export type ArtifactPaths = {
   gateResultFile: string
   reviewerContextFile: string
   auditorContextFile: string
+  timelineFile: string
   diffFile: string
   validatedFile: string
   payloadFile: string

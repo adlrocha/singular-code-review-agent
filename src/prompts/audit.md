@@ -6,7 +6,7 @@ Use these attached files:
 
 - `{{queueFile}}` as the queue to modify
 - `{{validatedFile}}` for current validation and dropped reasons
-- `{{auditorContextFile}}` for trigger context, previous bot comments, and unresolved bot threads
+- `{{auditorContextFile}}` for trigger context, PR timeline, previous bot comments, and unresolved bot threads
 - `{{reviewerOutputFile}}` for the findings already discovered
 
 Tighten the queue in place:

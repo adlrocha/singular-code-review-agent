@@ -10,7 +10,7 @@ import {
   findSessionId,
   textFromJsonEvent
 } from "../dist/clients/opencode.js"
-import { buildAuditPrompt, buildSynthesisPrompt } from "../dist/prompts/prompts.js"
+import { buildAuditPrompt, buildGatePrompt, buildReviewPrompt, buildSynthesisPrompt } from "../dist/prompts/prompts.js"
 
 function makeExecutable(file, body) {
   fs.writeFileSync(file, body, { mode: 0o755 })
@@ -92,6 +92,14 @@ printf '{"type":"text","sessionID":"ses_789","text":"Rendered review.\\\\n"}\\n'
 })
 
 test("audit and synthesis prompts stay phase-specific because auditor owns post-processing scope", () => {
+  const gatePrompt = buildGatePrompt({
+    contextFile: "gate_context.json",
+    deltaFile: "delta.diff"
+  })
+  const reviewPrompt = buildReviewPrompt({
+    contextFile: "review_model_context.json",
+    diffFile: "pr.diff"
+  })
   const auditPrompt = buildAuditPrompt({
     workspace: "/repo",
     queueFile: "/tmp/.singular-code-review/run/review_queue.json",
@@ -106,9 +114,12 @@ test("audit and synthesis prompts stay phase-specific because auditor owns post-
   })
 
   assert.doesNotMatch(auditPrompt, /^You are running a Singular Code Review post-processing phase\./u)
+  assert.match(gatePrompt, /pr_timeline\.chronological_entries/u)
+  assert.match(reviewPrompt, /pr_timeline\.chronological_entries/u)
   assert.match(auditPrompt, /Audit the queued pull request review comments/u)
   assert.doesNotMatch(synthesisPrompt, /^You are running a Singular Code Review post-processing phase\./u)
   assert.match(synthesisPrompt, /Write the final GitHub pull request review body/u)
+  assert.match(synthesisPrompt, /pr_timeline\.chronological_entries/u)
   assert.match(synthesisPrompt, /Always end with a `Verdict` section/u)
   assert.match(synthesisPrompt, /Do not expose runner internals/u)
   assert.match(synthesisPrompt, /has_conclusion/u)

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { buildArtifactPaths, resolveWorkspace } from "../config/paths.js"
 import { runCliMain } from "../lib/cli-main.js"
 import { readJsonFile, writeJsonFile } from "../lib/json.js"
-import { createEmptyReviewContext } from "../review/context.js"
+import { buildValidationContext, createEmptyReviewContext } from "../review/context.js"
 import {
   addInlineComment,
   addReply,
@@ -16,7 +16,7 @@ import {
   validateInlineComment,
   validateQueue
 } from "../review/queue.js"
-import { type ReviewContext, type ReviewInlineCommentInput } from "../review/types.js"
+import { type ReviewInlineCommentInput, type ReviewValidationContext } from "../review/types.js"
 
 type ParsedArgs = {
   _: string[]
@@ -129,7 +129,7 @@ function validateInlineTarget(input: ReviewInlineCommentInput, options: ParsedAr
     return
   }
 
-  const context = readJsonFile<ReviewContext>(contextFile, createEmptyReviewContext())
+  const context = readJsonFile<ReviewValidationContext>(contextFile, buildValidationContext(createEmptyReviewContext()))
   const result = validateInlineComment(input, context)
   if (!result.ok) {
     throw new Error(`invalid inline comment target: ${result.reason}`)
@@ -207,7 +207,10 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   }
 
   if (command === "validate") {
-    const context = readJsonFile<ReviewContext>(contextFileFromOptions(options, env), createEmptyReviewContext())
+    const context = readJsonFile<ReviewValidationContext>(
+      contextFileFromOptions(options, env),
+      buildValidationContext(createEmptyReviewContext())
+    )
     const validated = validateQueue(loadQueue(queueFile), context)
     const output = stringOption(options, "output")
     if (output) {
@@ -219,7 +222,10 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   }
 
   if (command === "status") {
-    const context = readJsonFile<ReviewContext>(contextFileFromOptions(options, env), createEmptyReviewContext())
+    const context = readJsonFile<ReviewValidationContext>(
+      contextFileFromOptions(options, env),
+      buildValidationContext(createEmptyReviewContext())
+    )
     const queue = loadQueue(queueFile)
     const validated = validateQueue(queue, context)
     printJson({
@@ -237,7 +243,10 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   }
 
   if (command === "payload-comments") {
-    const context = readJsonFile<ReviewContext>(contextFileFromOptions(options, env), createEmptyReviewContext())
+    const context = readJsonFile<ReviewValidationContext>(
+      contextFileFromOptions(options, env),
+      buildValidationContext(createEmptyReviewContext())
+    )
     printJson(
       validateQueue(loadQueue(queueFile), context).inlineComments.map(comment => ({
         path: comment.path,

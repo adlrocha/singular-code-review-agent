@@ -2,6 +2,7 @@ import { Octokit } from "@octokit/rest"
 import { type ArtifactStore } from "../lib/artifacts.js"
 import {
   type IssueComment,
+  type PullRequestCommit,
   type PullRequestReview,
   type ReviewComment,
   type ReviewPayload,
@@ -55,6 +56,7 @@ export type GitHubClient = {
   listIssueComments(prNumber: number): Promise<IssueComment[]>
   listReviewComments(prNumber: number): Promise<ReviewComment[]>
   listReviews(prNumber: number): Promise<PullRequestReview[]>
+  listPullRequestCommits(prNumber: number): Promise<PullRequestCommit[]>
   listReviewThreads(prNumber: number): Promise<ReviewThreadsResult>
   listIssueCommentReactions(commentId: number): Promise<Reaction[]>
   createIssueCommentReaction(commentId: number, content: "eyes"): Promise<void>
@@ -88,8 +90,6 @@ type GraphQLThreadNode = {
       path?: string | null
       line?: number | null
       startLine?: number | null
-      diffSide?: string | null
-      startDiffSide?: string | null
       createdAt?: string | null
       url?: string | null
       author?: {
@@ -128,8 +128,8 @@ function normalizeReviewThread(node: GraphQLThreadNode): ReviewThread {
     path: comment.path || node.path || null,
     line: comment.line || node.line || null,
     start_line: comment.startLine || node.startLine || null,
-    side: comment.diffSide || node.diffSide || "RIGHT",
-    start_side: comment.startDiffSide || node.startDiffSide || null,
+    side: node.diffSide || "RIGHT",
+    start_side: node.startDiffSide || null,
     created_at: comment.createdAt || null,
     html_url: comment.url || null
   }))
@@ -222,6 +222,15 @@ export function createGitHubClient(options: { token: string; repository: string 
       })) as PullRequestReview[]
     },
 
+    async listPullRequestCommits(prNumber) {
+      return (await octokit.paginate("GET /repos/{owner}/{repo}/pulls/{pull_number}/commits", {
+        owner,
+        repo,
+        pull_number: prNumber,
+        per_page: 100
+      })) as PullRequestCommit[]
+    },
+
     async listReviewThreads(prNumber) {
       const query = `
 query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
@@ -245,8 +254,6 @@ query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
               path
               line
               startLine
-              diffSide
-              startDiffSide
               createdAt
               url
               author {
@@ -360,6 +367,7 @@ export function createDryRunGitHubClient(delegate: GitHubClient, artifacts: Arti
     listIssueComments: prNumber => delegate.listIssueComments(prNumber),
     listReviewComments: prNumber => delegate.listReviewComments(prNumber),
     listReviews: prNumber => delegate.listReviews(prNumber),
+    listPullRequestCommits: prNumber => delegate.listPullRequestCommits(prNumber),
     listReviewThreads: prNumber => delegate.listReviewThreads(prNumber),
     listIssueCommentReactions: commentId => delegate.listIssueCommentReactions(commentId),
     async createIssueCommentReaction(commentId, content) {
