@@ -75,7 +75,9 @@ dependencies. The runner then:
 
 The gate never submits a GitHub review. It either posts a fresh pull-request
 issue comment for direct answers or low-risk deltas, or it falls through to the
-normal full review pipeline. If the gate fails, emits invalid JSON, cannot
+normal full review pipeline. Low-risk no-review gate comments end with a final
+`✅ LGTM` line so the skip reads like a visual approval even though GitHub Apps
+cannot submit an approval review. If the gate fails, emits invalid JSON, cannot
 reconstruct the delta safely, or is unsure, the runner performs the full review.
 `DRY_RUN=true` bypasses the gate so local dry runs and eval captures always
 exercise the reviewer/auditor/synthesis path.

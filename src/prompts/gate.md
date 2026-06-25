@@ -35,6 +35,7 @@ Decision rules:
 - For `review`, do not include an `answer`.
 - For `no-review` and `answer`, include `answer`.
 - Keep `answer` concise, user-facing, and free of runner internals.
+- For `no-review`, do not include an approval marker or `LGTM` line in the JSON. The runner appends the final `✅ LGTM` line after parsing your answer.
 
 Examples:
 

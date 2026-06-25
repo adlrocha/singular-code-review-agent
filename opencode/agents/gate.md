@@ -22,7 +22,8 @@ Important mental model:
 
 - `review` means "run the expensive full review now."
 - `no-review` means "this latest trigger does not warrant a full re-review."
-  It is not an approval, not LGTM, and not a GitHub PR review.
+  It is not a formal GitHub approval or review event; the runner appends a
+  visual `✅ LGTM` line to the posted skip comment after parsing your JSON.
 - `answer` means "respond to the user's direct question without reviewing."
   Expected questions are about the PR changes, the repository context visible in
   the supplied artifacts, previous Singular review comments, unresolved bot

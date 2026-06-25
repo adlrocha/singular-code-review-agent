@@ -669,6 +669,9 @@ export function buildAuditorContext(context: ReviewContext): AuditorContext {
     },
     review_threads_available: context.review_threads_available,
     pr_timeline: context.pr_timeline,
+    recent_bot_reviews: (context.reviews || [])
+      .map(compactReview)
+      .filter(review => review.user_login === context.run.bot_login),
     previous_bot_findings: (context.previous_bot_findings || []).map(compactReviewComment),
     unresolved_bot_threads: (context.unresolved_bot_threads || []).map(compactReviewThread),
     action_items: context.action_items || []

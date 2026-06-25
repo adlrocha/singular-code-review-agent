@@ -372,6 +372,16 @@ test("runner executes review, audit, synthesis, validation, and submission in or
   assert.equal(Object.hasOwn(validationContext, "issue_comments"), false)
   const auditorContext = JSON.parse(fs.readFileSync(config.artifacts.auditorContextFile, "utf8"))
   assert.deepEqual(auditorContext.diff.files, ["src/app.js", "src/new.js"])
+  assert.deepEqual(auditorContext.recent_bot_reviews, [
+    {
+      id: 1,
+      user_login: "singular-code-review[bot]",
+      state: "COMMENTED",
+      body: "Previous review.",
+      submitted_at: "2026-06-15T00:00:00Z",
+      commit_id: headSha
+    }
+  ])
   assert.equal(Object.hasOwn(auditorContext, "valid_comment_ranges"), false)
   assert.equal(Object.hasOwn(auditorContext, "review_comments"), false)
   assert.equal(auditorContext.review_seems_complete, false)
@@ -532,6 +542,50 @@ test("runner uses gate answer for direct mention questions without submitting a 
     decision: "answer",
     status: "answered",
     answer: "Yes, the previous finding still applies."
+  })
+})
+
+test("runner posts gate no-review comments with a final LGTM line", async () => {
+  const { workspace, base, reviewed } = createGitWorkspace("runner-gate-no-review-")
+  const config = createConfig(workspace)
+  config.eventName = "pull_request"
+  config.eventPath = writeEventFile(workspace, {
+    action: "synchronize",
+    pull_request: { number: 42 },
+    sender: { login: "octocat" }
+  })
+  const artifacts = new ArtifactStore(config.artifacts)
+  const github = createGitHub(fs.readFileSync(fixture, "utf8"), {
+    baseSha: base,
+    headSha: reviewed,
+    reviews: [botReview(reviewed)]
+  })
+  const opencode = {
+    async run() {
+      throw new Error("gate no-review should not call OpenCode")
+    }
+  }
+
+  const result = await runReviewWorkflow({
+    config,
+    artifacts,
+    github: github.client,
+    opencode,
+    logger: createLogger()
+  })
+
+  const expectedAnswer =
+    "No full re-review needed: the current head commit already has a completed Singular Code Review.\n\n✅ LGTM"
+  assert.equal(result.status, "no-review")
+  assert.equal(result.reason, expectedAnswer)
+  assert.deepEqual(github.submitted.issueComments, [expectedAnswer])
+  assert.deepEqual(github.submitted.reviews, [])
+  const gateResult = JSON.parse(fs.readFileSync(config.artifacts.gateResultFile, "utf8"))
+  assert.deepEqual(gateResult, {
+    generated_at: gateResult.generated_at,
+    decision: "no-review",
+    status: "no-review",
+    answer: expectedAnswer
   })
 })
 

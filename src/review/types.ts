@@ -340,6 +340,14 @@ export type AuditorContext = {
   review_threads_available: boolean
   review_seems_complete?: boolean
   pr_timeline: ReviewTimelineContext
+  recent_bot_reviews: Array<{
+    id: number | null
+    user_login: string | null
+    state: string | null
+    body: string
+    submitted_at: string | null
+    commit_id: string | null
+  }>
   previous_bot_findings: Array<{
     id: number
     path: string | null

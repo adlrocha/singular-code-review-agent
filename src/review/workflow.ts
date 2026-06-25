@@ -213,22 +213,33 @@ function gateContextForPrompt(context: GateContext, gateDeltaPath: string): Gate
   }
 }
 
+function formatGateAnswer(decision: Extract<GateDecision, { decision: "answer" | "no-review" }>): string {
+  const answer = decision.answer.trim()
+  if (decision.decision !== "no-review") {
+    return answer
+  }
+
+  const withoutExistingVerdict = answer.replace(/\n{2,}✅\s*LGTM\.?\s*$/u, "").trim()
+  return withoutExistingVerdict ? `${withoutExistingVerdict}\n\n✅ LGTM` : "✅ LGTM"
+}
+
 async function postGateAnswer(
   state: ReviewWorkflowState,
   decision: Extract<GateDecision, { decision: "answer" | "no-review" }>
 ): Promise<ReviewWorkflowResult> {
-  await state.github.createIssueComment(state.config.prNumber, decision.answer)
+  const answer = formatGateAnswer(decision)
+  await state.github.createIssueComment(state.config.prNumber, answer)
   const status = decision.decision === "answer" ? "answered" : "no-review"
   state.artifacts.writeJson(state.paths.gateResultFile, {
     generated_at: new Date().toISOString(),
     decision: decision.decision,
     status,
-    answer: decision.answer
+    answer
   })
   state.logger.info(`gate: posted ${status} comment`)
   return {
     status,
-    reason: decision.answer
+    reason: answer
   }
 }
 
