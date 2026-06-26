@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url"
 
 import { main as reviewCommentsMain } from "../dist/cli/review-comments.js"
 import { applyReviewBanner, buildReviewPayload } from "../dist/review/body.js"
-import { buildValidationContext } from "../dist/review/context.js"
+import { buildReviewerContext, buildValidationContext, createEmptyReviewContext } from "../dist/review/context.js"
 import { filterReviewDiff, parseUnifiedDiff, validCommentRangesFromDiff } from "../dist/review/diff.js"
 import {
   addInlineComment,
@@ -307,4 +307,25 @@ test("review payload maps validated queue comments to GitHub review shape", () =
       }
     ]
   })
+})
+
+test("participants exclude bot logins with or without the bot suffix", () => {
+  const reviewerContext = buildReviewerContext({
+    ...createEmptyReviewContext(),
+    run: {
+      event_name: null,
+      reason: "manual",
+      actor: null,
+      trigger_comment: null,
+      command: "@singular-code-review",
+      bot_login: "singular-code-review[bot]"
+    },
+    issue_comments: [
+      { id: 1, user: { login: "singular-code-review" }, body: "Bot-authored review note." },
+      { id: 2, user: { login: "linear-code[bot]" }, body: "SHE-170" },
+      { id: 3, user: { login: "fthemudo" }, body: "Thanks for the review." }
+    ]
+  })
+
+  assert.deepEqual(reviewerContext.participants, ["<@fthemudo>"])
 })

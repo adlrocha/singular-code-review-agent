@@ -4,6 +4,8 @@ Use the compact gate context at `{{contextFile}}` and the delta file at `{{delta
 
 Use `pr_timeline.chronological_entries` in the gate context to understand chronology: which comments are stale, whether a human instruction came after the latest bot activity, and whether pushes are merge/rebase churn or meaningful PR work. Use `pr_timeline.full_event_file` if an id or SHA needs inspection.
 
+Use exact GitHub handles from context. `participants` entries are formatted as `Name <@username>` or `<@username>` for humans who authored, commented, reviewed, or pushed commits on the PR. When directly addressing or tagging someone in an `answer`, use the exact `@username` shown inside a participant entry. Never invent an `@handle` from a real name or first name; if the exact handle is not available, omit the tag. Write mentions as plain text, for example `@octocat`, without backticks or code formatting so GitHub notifies the user.
+
 Output contract:
 
 - Output exactly one JSON object.

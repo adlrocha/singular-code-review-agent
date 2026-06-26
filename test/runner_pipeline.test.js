@@ -308,6 +308,7 @@ test("runner executes review, audit, synthesis, validation, and submission in or
   assert.equal(reviewerContext.pr.title, "Test PR")
   assert.equal(reviewerContext.pr.head_repository, "owner/repo")
   assert.equal(Object.hasOwn(reviewerContext.pr, "forks_url"), false)
+  assert.deepEqual(reviewerContext.participants, ["Joao <@entomb>"])
   assert.deepEqual(reviewerContext.diff.ranges["src/app.js"].added, ["2", "4", "6"])
   assert.deepEqual(reviewerContext.diff.ranges["src/new.js"].added, ["1-2"])
   assert.equal(Object.hasOwn(reviewerContext.diff, "ignored_files"), false)
@@ -372,6 +373,7 @@ test("runner executes review, audit, synthesis, validation, and submission in or
   assert.equal(Object.hasOwn(validationContext, "issue_comments"), false)
   const auditorContext = JSON.parse(fs.readFileSync(config.artifacts.auditorContextFile, "utf8"))
   assert.deepEqual(auditorContext.diff.files, ["src/app.js", "src/new.js"])
+  assert.deepEqual(auditorContext.participants, reviewerContext.participants)
   assert.deepEqual(auditorContext.recent_bot_reviews, [
     {
       id: 1,

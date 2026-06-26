@@ -60,6 +60,7 @@ export function createEmptyReviewContext(overrides: Partial<ReviewContext> = {})
     unresolved_review_threads: [],
     unresolved_bot_threads: [],
     reviews: [],
+    pr_commits: [],
     pr_timeline: {
       full_event_file: "",
       older_entries_omitted_due_to_long_history: 0,
@@ -136,6 +137,17 @@ function shortSha(value: string | null | undefined): string | null {
 
 function actorLogin(user: { login?: string | null } | null | undefined): string | null {
   return user?.login || null
+}
+
+function isHumanLogin(login: string | null | undefined, botLogin: string): login is string {
+  const normalized = login?.toLowerCase()
+  const normalizedBot = botLogin.toLowerCase()
+  const normalizedBotBase = normalizedBot.endsWith("[bot]") ? normalizedBot.slice(0, -"[bot]".length) : normalizedBot
+
+  if (!normalized || normalized === normalizedBot || normalized === normalizedBotBase) {
+    return false
+  }
+  return !/\[bot\]$/u.test(normalized)
 }
 
 function atMillis(value: string | null | undefined): number | null {
@@ -517,6 +529,88 @@ function compactPullRequest(value: unknown): AuditorContext["pr"] {
   }
 }
 
+function addParticipant(
+  participants: Map<string, string>,
+  input: {
+    login?: string | null
+    name?: string | null
+  },
+  botLogin: string
+): void {
+  if (!isHumanLogin(input.login, botLogin)) {
+    return
+  }
+
+  const login = input.login
+  const key = login.toLowerCase()
+  const mention = `@${login}`
+  const unnamed = `<${mention}>`
+  const formatted = input.name && input.name.toLowerCase() !== key ? `${input.name} <${mention}>` : unnamed
+  const existing = participants.get(key)
+
+  if (existing && (existing !== unnamed || formatted === unnamed)) {
+    return
+  }
+
+  participants.set(key, formatted)
+}
+
+function buildParticipants(context: ReviewContext): string[] {
+  const participants = new Map<string, string>()
+  const botLogin = context.run.bot_login
+  const pr = asRecord(context.pr)
+  const author = asRecord(pr.author)
+  const user = asRecord(pr.user)
+
+  addParticipant(participants, { login: context.run.actor }, botLogin)
+  addParticipant(participants, { login: context.run.trigger_comment?.user }, botLogin)
+  addParticipant(participants, { login: stringValue(author.login) || stringValue(user.login) }, botLogin)
+
+  for (const commit of context.pr_commits || []) {
+    addParticipant(
+      participants,
+      { login: actorLogin(commit.author), name: stringValue(commit.commit?.author?.name) },
+      botLogin
+    )
+    addParticipant(
+      participants,
+      {
+        login: actorLogin(commit.committer),
+        name: stringValue(commit.commit?.committer?.name)
+      },
+      botLogin
+    )
+  }
+
+  for (const comment of context.issue_comments || []) {
+    addParticipant(participants, { login: actorLogin(comment.user) }, botLogin)
+  }
+
+  for (const review of context.reviews || []) {
+    addParticipant(participants, { login: actorLogin(review.user) }, botLogin)
+  }
+
+  if (context.review_threads_available) {
+    for (const thread of context.review_threads || []) {
+      addParticipant(participants, { login: thread.top_level_author }, botLogin)
+      addParticipant(participants, { login: thread.latest_author }, botLogin)
+      for (const comment of thread.comments || []) {
+        addParticipant(participants, { login: actorLogin(comment.user) }, botLogin)
+      }
+    }
+  } else {
+    for (const comment of context.review_comments || []) {
+      addParticipant(participants, { login: actorLogin(comment.user) }, botLogin)
+    }
+  }
+
+  for (const item of context.action_items || []) {
+    addParticipant(participants, { login: item.actor }, botLogin)
+  }
+
+  return [...participants.values()]
+}
+
 function compactReviewComment(comment: ReviewComment): AuditorContext["previous_bot_findings"][number] {
   return {
     id: comment.id,
@@ -668,6 +762,7 @@ export function buildAuditorContext(context: ReviewContext): AuditorContext {
       ignored_files: Array.isArray(context.diff.ignored_files) ? context.diff.ignored_files : []
     },
     review_threads_available: context.review_threads_available,
+    participants: buildParticipants(context),
     pr_timeline: context.pr_timeline,
     recent_bot_reviews: (context.reviews || [])
       .map(compactReview)
@@ -783,6 +878,7 @@ export async function buildReviewContext(options: BuildReviewContextOptions): Pr
       bot_login: botLogin
     },
     pr,
+    pr_commits: commits,
     diff: {
       file: options.diffFile,
       ignored_files: filteredDiff.ignoredFiles,

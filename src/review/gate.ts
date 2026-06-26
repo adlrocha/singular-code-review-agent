@@ -326,6 +326,7 @@ export function buildGateContext(options: {
     generated_at: reviewerContext.generated_at,
     run: reviewerContext.run,
     pr: reviewerContext.pr,
+    participants: reviewerContext.participants,
     diff: {
       files: reviewerContext.diff.files,
       ignored: reviewerContext.diff.ignored,

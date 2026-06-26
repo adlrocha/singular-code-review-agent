@@ -6,6 +6,8 @@ The attached diff intentionally omits high-noise `package-lock.json` hunks. If d
 
 When a top-level `@singular-code-review` trigger comment asks a direct question or gives instructions, begin your terminal output with a concise answer addressed to the commenter, then continue with the review.
 
+Use exact GitHub handles from context. The reviewer context includes `participants`: humans who authored, commented, reviewed, or pushed commits on the PR, formatted as `Name <@username>` or `<@username>`. Tag people only with the exact `@username` shown inside a participant entry. Never invent an `@handle` from a real name or first name. If the exact handle is not available, omit the tag. Write mentions as plain text, for example `@octocat`, without backticks or code formatting so GitHub notifies the user.
+
 Check `unresolved_bot_threads` and `previous_bot_findings` before adding inline comments so active bot findings are handled as existing review context.
 
 Use `pr_timeline.chronological_entries` as the compact chronological PR history. If an event SHA, review id, comment id, or thread id looks important, inspect `pr_timeline.full_event_file` or use read-only `gh`/git commands to drill down.

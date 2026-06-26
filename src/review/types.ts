@@ -271,6 +271,7 @@ export type ReviewContext = {
   unresolved_review_threads: ReviewThread[]
   unresolved_bot_threads: ReviewThread[]
   reviews: PullRequestReview[]
+  pr_commits: PullRequestCommit[]
   pr_timeline: ReviewTimelineContext
   previous_bot_findings: ReviewComment[]
   action_items: ReviewActionItem[]
@@ -339,6 +340,7 @@ export type AuditorContext = {
   }
   review_threads_available: boolean
   review_seems_complete?: boolean
+  participants: string[]
   pr_timeline: ReviewTimelineContext
   recent_bot_reviews: Array<{
     id: number | null
@@ -429,6 +431,7 @@ export type GateContext = Pick<
   | "generated_at"
   | "run"
   | "pr"
+  | "participants"
   | "pr_timeline"
   | "issue_comments"
   | "previous_bot_findings"

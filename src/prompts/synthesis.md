@@ -4,6 +4,8 @@ Use the reviewer output at `{{reviewerOutputFile}}`, the final validated review 
 
 Use `pr_timeline.chronological_entries` in the auditor context for PR chronology, especially when deciding whether a trigger comment is stale or whether an incomplete review caveat is warranted. The timeline is context, not evidence by itself; use the reviewer output and validated queue for final claims.
 
+Use exact GitHub handles from the auditor context. `participants` entries are formatted as `Name <@username>` or `<@username>` for humans who authored, commented, reviewed, or pushed commits on the PR. When directly addressing or tagging someone, use the exact `@username` shown inside a participant entry. Never invent an `@handle` from a real name or first name; if the exact handle is not available, omit the tag. Write mentions as plain text, for example `@octocat`, without backticks or code formatting so GitHub notifies the user.
+
 Output contract:
 
 - Write only the final review body text to stdout.
@@ -20,7 +22,7 @@ Output contract:
 
 Desired shape:
 
-- When the context contains a top-level `@singular-code-review` trigger question or instruction, begin with a concise direct answer addressed to the commenter by GitHub handle. Put that answer before the review summary.
+- When the context contains a top-level `@singular-code-review` trigger question or instruction, begin with a concise direct answer addressed to the commenter by exact participant `@username` when available. Put that answer before the review summary.
 - Use `recent_bot_reviews` and `pr_timeline.chronological_entries` from the auditor context to identify follow-up reviews. When at least one prior Singular bot review exists for this PR, treat the body as a follow-up by default.
 - For follow-up reviews, do not repeat full `Review Summary` and `Recommendations` sections unless the latest delta substantially changes the PR shape or introduces a new high-severity theme. Prefer one concise paragraph covering what changed since the last bot review, which prior findings are resolved, and any new or still-open risk. If there are no new or remaining actionable findings, go straight to the verdict.
 - For the first substantive review, prefer one short opening paragraph that explains what the PR changes and the overall review state.
