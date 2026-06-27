@@ -111,6 +111,8 @@ test("reusable workflow runs guard, ack, provisioning, and the new runner", () =
     workflow,
     /name: Run Singular Code Review\s+if: steps\.review-request\.outputs\.should_review == 'true'\s+timeout-minutes: 42\s+run: \|\s+for attempt in 1 2; do/
   )
+  assert.ok(workflow.indexOf("Run review guard") < workflow.indexOf("Create GitHub App token"))
+  assert.ok(workflow.indexOf("Run review guard") < workflow.indexOf("Provision review workspace"))
   assert.match(workflow, /timeout 20m \/usr\/local\/bin\/review_runner/)
   assert.match(workflow, /review_runner attempt \$\{attempt\}\/2/)
   assert.match(workflow, /\/usr\/local\/bin\/review_runner/)

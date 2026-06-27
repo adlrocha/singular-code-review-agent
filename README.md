@@ -51,9 +51,15 @@ workflow file and the runtime secrets required by that workflow.
 
 ## How it works
 
-At runtime, the reusable workflow mints a GitHub App installation token and uses
-that token for checkout, context reads, review replies, and review submission.
-The container then runs `provision.sh` followed by `review_runner`.
+At runtime, the reusable workflow starts with a mechanical `review_guard`
+preflight. The guard blocks fork PRs and PR-level skip directives before the
+workflow creates the GitHub App token, checks out code, provisions OpenCode, or
+starts a review. To opt out of a review, start the PR title with `[skip]` or put
+`@singular-code-review skip` in the PR body.
+
+When the guard allows a run, the workflow mints a GitHub App installation token
+and uses that token for checkout, context reads, review replies, and review
+submission. The container then runs `provision.sh` followed by `review_runner`.
 Provisioning installs the committed OpenCode config and target-repository
 dependencies. The runner then:
 
@@ -149,10 +155,12 @@ installing dependencies, or starting OpenCode.
 
 Mention-triggered reviews are restricted to human `OWNER`, `MEMBER`, or
 `COLLABORATOR` comments and are still denied when the pull request head is a
-fork. The caller job also cancels older in-progress review runs for the same
-pull request, and the reusable workflow has the same PR-scoped concurrency
-guard for older copied client workflows. Repeated commands should not run paid
-reviews in parallel.
+fork. A PR title starting with `[skip]` or a PR body line containing
+`@singular-code-review skip` skips the workflow before checkout, provisioning,
+or OpenCode startup. The caller job also cancels older in-progress review runs
+for the same pull request, and the reusable workflow has the same PR-scoped
+concurrency guard for older copied client workflows. Repeated commands should
+not run paid reviews in parallel.
 
 This still assumes the consuming repository's branches and write collaborators
 are trusted enough to run code with the repository's Actions secrets. For public

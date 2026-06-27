@@ -4,6 +4,9 @@ import { createGitHubClient } from "../clients/github.js"
 import { runCliMain } from "../lib/cli-main.js"
 import { REVIEW_COMMAND } from "../review/types.js"
 
+const SKIP_TITLE_PREFIX = "[skip]"
+const SKIP_COMMAND_PATTERN = /^(?:please\s+)?skip(?:\s+(?:this|review|run))?[.!?]?\s*$/u
+
 function output(name: string, value: string, env: NodeJS.ProcessEnv): void {
   if (env.GITHUB_OUTPUT) {
     appendFileSync(env.GITHUB_OUTPUT, `${name}=${value}\n`)
@@ -33,15 +36,27 @@ function trustedAssociation(value: string | null | undefined): boolean {
   return value === "OWNER" || value === "MEMBER" || value === "COLLABORATOR"
 }
 
-function requestsSkip(body: unknown): boolean {
-  const text = String(body || "").toLowerCase()
-  const commandIndex = text.indexOf(REVIEW_COMMAND)
-  if (commandIndex < 0) {
-    return false
-  }
+function requestsSkipByTitle(title: unknown): boolean {
+  return String(title || "")
+    .trimStart()
+    .toLowerCase()
+    .startsWith(SKIP_TITLE_PREFIX)
+}
 
-  const commandText = text.slice(commandIndex + REVIEW_COMMAND.length).trim()
-  return /^(?:please\s+)?skip(?:\s+(?:this|review|run))?[.!?]?\s*$/u.test(commandText)
+function requestsSkip(body: unknown): boolean {
+  const lines = String(body || "")
+    .toLowerCase()
+    .split(/\r?\n/u)
+
+  return lines.some(line => {
+    const commandIndex = line.indexOf(REVIEW_COMMAND)
+    if (commandIndex < 0) {
+      return false
+    }
+
+    const commandText = line.slice(commandIndex + REVIEW_COMMAND.length).trim()
+    return SKIP_COMMAND_PATTERN.test(commandText)
+  })
 }
 
 function parseIssueUrl(value: string | null | undefined): { repository: string; issueNumber: number } | null {
@@ -95,6 +110,14 @@ export async function evaluateGuard(options: {
     // Fork PRs cannot receive repository secrets or App tokens safely in this
     // workflow model.
     return { shouldReview: false, reason: "fork pull requests are not reviewed" }
+  }
+
+  if (requestsSkipByTitle(pr.title)) {
+    return { shouldReview: false, reason: "pull request title requested skip" }
+  }
+
+  if (requestsSkip(pr.body)) {
+    return { shouldReview: false, reason: "pull request body requested skip" }
   }
 
   if (options.triggerCommentId) {

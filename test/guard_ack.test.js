@@ -76,6 +76,50 @@ test("guard does not treat incidental skip wording as a skip command", async () 
   assert.deepEqual(result, { shouldReview: true, reason: "allowed" })
 })
 
+test("guard skips pull requests with a skip title prefix", async () => {
+  const result = await evaluateGuard({
+    repository: "owner/repo",
+    prNumber: 42,
+    triggerCommentId: null,
+    github: {
+      async getPullRequest() {
+        return {
+          number: 42,
+          title: "  [skip] Drafting generated fixtures",
+          head: { repo: { full_name: "owner/repo" } }
+        }
+      },
+      async getIssueComment() {
+        throw new Error("not used")
+      }
+    }
+  })
+
+  assert.deepEqual(result, { shouldReview: false, reason: "pull request title requested skip" })
+})
+
+test("guard skips pull requests with a body skip directive", async () => {
+  const result = await evaluateGuard({
+    repository: "owner/repo",
+    prNumber: 42,
+    triggerCommentId: 99,
+    github: {
+      async getPullRequest() {
+        return {
+          number: 42,
+          body: "Generated update.\n\n@singular-code-review skip\n\nNo bot review needed.",
+          head: { repo: { full_name: "owner/repo" } }
+        }
+      },
+      async getIssueComment() {
+        throw new Error("not used because PR body skip wins")
+      }
+    }
+  })
+
+  assert.deepEqual(result, { shouldReview: false, reason: "pull request body requested skip" })
+})
+
 test("guard denies forks and untrusted trigger comments", async () => {
   assert.deepEqual(
     await evaluateGuard({

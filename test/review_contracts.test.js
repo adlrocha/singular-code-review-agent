@@ -77,6 +77,28 @@ test("queue supports comments, suggestions, replies, and conclusion", () => {
   assert.match(queue.inlineComments[2].body, /```suggestion/)
 })
 
+test("queue separates markdown rules from preceding prose before GitHub rendering", () => {
+  const queueFile = tempFile("queue.json")
+  clearQueue(queueFile)
+
+  addInlineComment(queueFile, {
+    path: "src/app.js",
+    line: 2,
+    body: "Problem sentence.\n---\n**action:** Fix the contract."
+  })
+  addSuggestion(queueFile, {
+    path: "src/new.js",
+    start_line: 1,
+    line: 2,
+    message: "Use the literal block.",
+    replacement: "---\nvalue"
+  })
+
+  const queue = loadQueue(queueFile)
+  assert.equal(queue.inlineComments[0].body, "Problem sentence.\n\n---\n**action:** Fix the contract.")
+  assert.match(queue.inlineComments[1].body, /```suggestion\n---\nvalue\n```/u)
+})
+
 test("validation is deterministic and keeps genuinely distinct same-line findings", () => {
   const queueFile = tempFile("queue.json")
   const diffText = fs.readFileSync(fixture, "utf8")

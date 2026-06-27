@@ -17,7 +17,7 @@ Tighten the queue in place:
 - keep multiple same-line comments only when they are genuinely distinct actionable issues
 - remove comments already covered by unresolved bot threads or previous bot comments
 - fix obvious shell-escaping damage or truncated wording
-- expect long or complex inline comments to separate the final remedy with `---` followed by a terse `**action:** ...` line; when a long comment buries the remedy inside a dense paragraph, correct it by moving only the remedy into that footer
+- expect long or complex inline comments to put the final remedy in a separate final paragraph beginning `**action:** ...`; when a long comment buries the remedy inside a dense paragraph, correct it by moving only the remedy into that footer without adding a `---` separator
 - leave short or self-contained comments as they are, and never restate the problem in the action line
 - preserve valid replies
 - tighten wording only when the underlying finding is unchanged

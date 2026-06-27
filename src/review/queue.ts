@@ -97,6 +97,38 @@ function normalizeSide(value: unknown, name: string): ReviewSide {
   return side
 }
 
+function normalizeMarkdownBody(body: unknown): string {
+  const lines = String(body || "")
+    .trim()
+    .replace(/\r\n?/gu, "\n")
+    .split("\n")
+  const normalized: string[] = []
+  let fence: { marker: "`" | "~"; length: number } | null = null
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    const fenceMatch = /^(?<marker>`{3,}|~{3,})/u.exec(trimmed)
+    if (fenceMatch?.groups?.marker) {
+      const marker = fenceMatch.groups.marker[0] as "`" | "~"
+      const length = fenceMatch.groups.marker.length
+      if (!fence) {
+        fence = { marker, length }
+      } else if (marker === fence.marker && length >= fence.length) {
+        fence = null
+      }
+    }
+
+    if (!fence && /^-{3,}$/u.test(trimmed) && normalized.length > 0 && normalized[normalized.length - 1]?.trim()) {
+      // A thematic break directly after text becomes a setext heading on GitHub.
+      normalized.push("")
+    }
+
+    normalized.push(line)
+  }
+
+  return normalized.join("\n").trim()
+}
+
 /**
  * Normalizes agent-provided inline comment input into the GitHub review comment
  * contract before any diff-aware validation happens.
@@ -107,7 +139,7 @@ export function normalizeInlineComment(input: ReviewInlineCommentInput): ReviewI
   const startLine = input.start_line === undefined ? undefined : positiveInteger(input.start_line, "start-line")
   const side = normalizeSide(input.side, "side")
   const startSide = input.start_side === undefined ? side : normalizeSide(input.start_side, "start-side")
-  const body = String(input.body || "").trim()
+  const body = normalizeMarkdownBody(input.body)
 
   if (!body) {
     throw new Error("body must be non-empty")
@@ -173,7 +205,7 @@ export function addSuggestion(
 
 export function normalizeReply(input: ReviewReplyInput): ReviewReply {
   const to = positiveInteger(input.to || input.comment_id, "to")
-  const body = String(input.body || "").trim()
+  const body = normalizeMarkdownBody(input.body)
 
   if (!body) {
     throw new Error("body must be non-empty")
@@ -191,7 +223,7 @@ export function addReply(file: string, input: ReviewReplyInput): ReviewReply {
 }
 
 export function setConclusion(file: string, bodyInput: string): { body: string } {
-  const body = String(bodyInput || "").trim()
+  const body = normalizeMarkdownBody(bodyInput)
   if (!body) {
     throw new Error("body must be non-empty")
   }
