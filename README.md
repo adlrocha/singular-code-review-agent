@@ -353,3 +353,36 @@ portable extractor outputs (`review_transcript.md`, `review_comments.json`, and
 `review_stats.json`) into a mounted or persistent directory. Use
 `--runtime-dir <path>` only when the alternate path is also allowed by the
 OpenCode sandbox configuration.
+
+## Self-hosting / running your own bot
+
+This repository can be forked and run under **your own GitHub App identity**
+without editing hard-coded values. All bot identity (App Client ID, command
+trigger, bot login, and the reviewer image) is driven by repository variables
+and secrets with upstream values kept as defaults, so downstream merges stay
+conflict-free.
+
+Quick start:
+
+```bash
+# 1. create your GitHub App (prints exact permissions/events to grant)
+scripts/setup-review-bot.sh create-app [--org YOUR_ORG]
+
+# 2. configure any repo (your fork, or a consuming repo) to use your bot
+scripts/setup-review-bot.sh configure \
+  --repo YOU/REPO \
+  --app-client-id Iv1... --private-key app.private-key.pem \
+  --opencode-key "$OPENCODE_API_KEY" \
+  --command '@your-bot' --image ghcr.io/you/code-review-agent:latest \
+  --agent-repo you/code-review-agent
+
+# 3. verify
+scripts/setup-review-bot.sh check --repo YOU/REPO
+```
+
+There is also an **agent skill** at [`.agents/skills/setup-review-bot/`](.agents/skills/setup-review-bot/SKILL.md)
+that any Agent-Skills-compatible agent (pi, Claude Code, Codex, …) auto-discovers
+and can follow to walk you through setup using the script above.
+
+See [`docs/SETUP.md`](docs/SETUP.md) for the full guide, the variables/secrets
+reference, fork-sync instructions, and an optional full-rebrand checklist.

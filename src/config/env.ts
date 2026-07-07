@@ -100,7 +100,7 @@ export function loadRunnerConfig(env: NodeJS.ProcessEnv, argv: string[] = []): R
     dryRun: args.dryRun || env.DRY_RUN === "true",
     model: env.OPENCODE_MODEL || "opencode-go/minimax-m2.7",
     gateModel: env.OPENCODE_GATE_MODEL || "opencode-go/deepseek-v4-flash",
-    command: REVIEW_COMMAND,
+    command: env.REVIEW_COMMAND || REVIEW_COMMAND,
     botLogin: env.BOT_LOGIN || REVIEW_BOT_LOGIN,
     artifacts,
     triggerCommentId: optionalPositiveInt(env.TRIGGER_COMMENT_ID),

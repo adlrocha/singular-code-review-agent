@@ -43,18 +43,18 @@ function requestsSkipByTitle(title: unknown): boolean {
     .startsWith(SKIP_TITLE_PREFIX)
 }
 
-function requestsSkip(body: unknown): boolean {
+function requestsSkip(body: unknown, command: string = REVIEW_COMMAND): boolean {
   const lines = String(body || "")
     .toLowerCase()
     .split(/\r?\n/u)
 
   return lines.some(line => {
-    const commandIndex = line.indexOf(REVIEW_COMMAND)
+    const commandIndex = line.indexOf(command.toLowerCase())
     if (commandIndex < 0) {
       return false
     }
 
-    const commandText = line.slice(commandIndex + REVIEW_COMMAND.length).trim()
+    const commandText = line.slice(commandIndex + command.length).trim()
     return SKIP_COMMAND_PATTERN.test(commandText)
   })
 }
@@ -98,7 +98,9 @@ export async function evaluateGuard(options: {
   repository: string
   prNumber: number
   triggerCommentId: number | null
+  command?: string
 }): Promise<{ shouldReview: boolean; reason: string }> {
+  const command = options.command || REVIEW_COMMAND
   let pr
   try {
     pr = await options.github.getPullRequest(options.prNumber)
@@ -116,7 +118,7 @@ export async function evaluateGuard(options: {
     return { shouldReview: false, reason: "pull request title requested skip" }
   }
 
-  if (requestsSkip(pr.body)) {
+  if (requestsSkip(pr.body, command)) {
     return { shouldReview: false, reason: "pull request body requested skip" }
   }
 
@@ -143,11 +145,11 @@ export async function evaluateGuard(options: {
       return { shouldReview: false, reason: "bot trigger comments are ignored" }
     }
 
-    if (!String(comment.body || "").includes(REVIEW_COMMAND)) {
-      return { shouldReview: false, reason: `trigger comment does not mention ${REVIEW_COMMAND}` }
+    if (!String(comment.body || "").includes(command)) {
+      return { shouldReview: false, reason: `trigger comment does not mention ${command}` }
     }
 
-    if (requestsSkip(comment.body)) {
+    if (requestsSkip(comment.body, command)) {
       return { shouldReview: false, reason: "trigger comment requested skip" }
     }
   }
@@ -160,8 +162,9 @@ export async function main(_argv = process.argv.slice(2), env = process.env): Pr
   const prNumber = Number(required(env.PR_NUMBER, "PR_NUMBER"))
   const token = required(env.GH_TOKEN || env.GITHUB_TOKEN, "GH_TOKEN")
   const triggerCommentId = env.TRIGGER_COMMENT_ID ? Number(env.TRIGGER_COMMENT_ID) : null
+  const command = env.REVIEW_COMMAND || REVIEW_COMMAND
   const github = createGitHubClient({ token, repository })
-  const result = await evaluateGuard({ github, repository, prNumber, triggerCommentId })
+  const result = await evaluateGuard({ github, repository, prNumber, triggerCommentId, command })
 
   if (result.shouldReview) {
     allow(env)

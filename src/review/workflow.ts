@@ -168,7 +168,8 @@ async function runGatheringPhase(state: ReviewWorkflowState): Promise<ReviewCont
     eventName: config.eventName,
     eventPath: config.eventPath,
     actor: config.actor,
-    botLogin: config.botLogin
+    botLogin: config.botLogin,
+    command: config.command
   })
 
   artifacts.writeJson(paths.contextFile, buildValidationContext(context))

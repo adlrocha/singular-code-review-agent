@@ -33,6 +33,7 @@ type BuildReviewContextOptions = {
   eventPath?: string | null
   actor?: string | null
   botLogin?: string
+  command?: string
 }
 
 /**
@@ -825,7 +826,7 @@ export function buildReviewerContext(context: ReviewContext): ReviewerContext {
  */
 export async function buildReviewContext(options: BuildReviewContextOptions): Promise<ReviewContext> {
   const botLogin = options.botLogin || REVIEW_BOT_LOGIN
-  const command = REVIEW_COMMAND
+  const command = options.command || REVIEW_COMMAND
   const trigger = readEventContext({
     eventName: options.eventName,
     eventPath: options.eventPath,

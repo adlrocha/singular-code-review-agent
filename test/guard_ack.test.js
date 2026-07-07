@@ -28,6 +28,54 @@ test("guard allows trusted same-repository trigger comments", async () => {
   assert.deepEqual(result, { shouldReview: true, reason: "allowed" })
 })
 
+test("guard honors a custom command override for trigger comments and skip directives", async () => {
+  const github = {
+    async getPullRequest() {
+      return { number: 42, head: { repo: { full_name: "owner/repo" } } }
+    },
+    async getIssueComment() {
+      return {
+        id: 99,
+        issue_url: "https://api.github.com/repos/owner/repo/issues/42",
+        author_association: "MEMBER",
+        user: { login: "alice", type: "User" },
+        body: "@my-reviewer please review"
+      }
+    }
+  }
+
+  const allowed = await evaluateGuard({
+    repository: "owner/repo",
+    prNumber: 42,
+    triggerCommentId: 99,
+    command: "@my-reviewer",
+    github
+  })
+  assert.deepEqual(allowed, { shouldReview: true, reason: "allowed" })
+
+  const skipped = await evaluateGuard({
+    repository: "owner/repo",
+    prNumber: 42,
+    triggerCommentId: 99,
+    command: "@my-reviewer",
+    github: {
+      async getPullRequest() {
+        return { number: 42, head: { repo: { full_name: "owner/repo" } } }
+      },
+      async getIssueComment() {
+        return {
+          id: 99,
+          issue_url: "https://api.github.com/repos/owner/repo/issues/42",
+          author_association: "MEMBER",
+          user: { login: "alice", type: "User" },
+          body: "@my-reviewer skip"
+        }
+      }
+    }
+  })
+  assert.deepEqual(skipped, { shouldReview: false, reason: "trigger comment requested skip" })
+})
+
 test("guard deterministically skips trusted skip commands", async () => {
   const result = await evaluateGuard({
     repository: "owner/repo",
